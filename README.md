@@ -30,7 +30,7 @@ Client-side only. Nothing is sent to the server.
 
 Requires:
 
-- the **AMML loader** (0.1.0 or later), which loads the mod into the game. The loader also carries the recipes that
+- the **AMML loader** (26.60.0 or later), which loads the mod into the game. The loader also carries the recipes that
   find the game addresses freecam uses (in its `recipes/`). An older loader does not have them: it
   logs "required entry ... did not resolve" and freecam stays off. Update the loader first.
 - [Alaydriem's Mod Manager](https://github.com/alaydriem/modmanager), installed as an AMML mod.
@@ -42,7 +42,7 @@ mod manager.
 
 | Freecam | Minecraft Bedrock | AMML loader | Mod Manager |
 | --- | --- | --- | --- |
-| 0.1.0 | 1.26.51, 1.26.60 | 0.1.0 or later | 0.1.x |
+| 26.60.0 | 1.26.51, 1.26.60 | 26.60.0 or later | 26.60.x |
 
 ## Controls
 

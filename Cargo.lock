@@ -542,7 +542,7 @@ dependencies = [
 
 [[package]]
 name = "freecam-amml"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amm-abi",
  "amm-client",
@@ -566,7 +566,7 @@ dependencies = [
 
 [[package]]
 name = "freecam-core"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amm-core",
  "curia",
@@ -577,7 +577,7 @@ dependencies = [
 
 [[package]]
 name = "freecam-ui"
-version = "0.1.0"
+version = "26.60.0"
 dependencies = [
  "amml-i18n",
  "amml-i18n-tool",
