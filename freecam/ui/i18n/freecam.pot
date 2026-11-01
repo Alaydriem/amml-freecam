@@ -1,0 +1,71 @@
+# Messages of the freecam domain, written by amml-i18n-tool. Do not edit.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Domain: freecam\n"
+
+#. The title of the freecam strip, painted in spaced capitals
+msgid "FREECAM"
+msgstr ""
+
+#. The freecam strip: how many path points, then the path length in seconds
+#, python-brace-format
+msgid "PATH  ·  {count} point  ·  {seconds} s"
+msgid_plural "PATH  ·  {count} points  ·  {seconds} s"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Screenshot failed"
+msgstr ""
+
+#. {name} is the file name of the screenshot
+#, python-brace-format
+msgid "Screenshot saved: {name}"
+msgstr ""
+
+msgid "Clear points"
+msgstr ""
+
+msgid "Click again to clear"
+msgstr ""
+
+#. The caption of the speed chip, painted in spaced capitals
+msgid "SPEED"
+msgstr ""
+
+#. b/s is blocks per second
+#, python-brace-format
+msgid "{speed} b/s"
+msgstr ""
+
+msgid "Add point"
+msgstr ""
+
+#, python-brace-format
+msgid "{count} point"
+msgid_plural "{count} points"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Adds at the playhead"
+msgstr ""
+
+#. Puts the selected path point again at the camera
+msgid "Re-place"
+msgstr ""
+
+msgid "Delete"
+msgstr ""
+
+#. The selected path point, as in Point 3
+#, python-brace-format
+msgid "Point {number}"
+msgstr ""
+
+msgid "There are no points to clear"
+msgstr ""
+
+msgid "A screenshot cannot be taken now"
+msgstr ""

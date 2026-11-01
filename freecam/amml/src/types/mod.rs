@@ -1,0 +1,32 @@
+// The plain data types of the mod
+pub mod capture_state;
+pub mod delivering_scope;
+pub mod frame_context;
+pub mod freecam_entry;
+pub mod freecam_feature;
+pub mod instruction_kind;
+pub mod instruction_state;
+pub mod link_state;
+pub mod look_basis;
+pub mod override_state;
+pub mod packet_slot;
+pub mod ray_box;
+pub mod shape_state;
+pub mod thread_id;
+pub mod watch_state;
+
+pub use capture_state::CaptureState;
+pub use delivering_scope::DeliveringScope;
+pub use frame_context::FrameContext;
+pub use freecam_entry::FreecamEntry;
+pub use freecam_feature::FreecamFeature;
+pub use instruction_kind::InstructionKind;
+pub use instruction_state::InstructionState;
+pub use link_state::LinkState;
+pub use look_basis::LookBasis;
+pub use override_state::OverrideState;
+pub use packet_slot::PacketSlot;
+pub use ray_box::RayBox;
+pub use shape_state::ShapeState;
+pub use thread_id::ThreadId;
+pub use watch_state::WatchState;

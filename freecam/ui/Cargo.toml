@@ -1,0 +1,28 @@
+[package]
+name = "freecam-ui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[dependencies]
+egui.workspace = true
+freecam-core.workspace = true
+curia.workspace = true
+amml-ui.workspace = true
+amml-i18n.workspace = true
+
+[dev-dependencies]
+stats_alloc.workspace = true
+amml-i18n-tool.workspace = true
+amml-ui-rules.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[lints]
+workspace = true

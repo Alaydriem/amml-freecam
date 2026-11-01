@@ -1,0 +1,69 @@
+[tasks.preflight]
+description = "Names a missing Rust toolchain or cargo-nextest before a build turns it into an obscure error"
+dir = "{{config_root}}"
+run = [
+  "rustc --version",
+  "cargo --version",
+  "cargo nextest --version",
+]
+
+[tasks.check]
+description = "cargo check, clippy with warnings denied, and rustfmt check over the workspace"
+dir = "{{config_root}}"
+run = [
+  "cargo check --workspace --all-targets",
+  "cargo clippy --workspace --all-targets -- -D warnings",
+  "cargo fmt --all --check",
+]
+
+[tasks.test]
+description = "Every workspace test through cargo-nextest"
+dir = "{{config_root}}"
+run = "cargo nextest run --workspace"
+
+[tasks.bench-ui]
+description = "Runs the headless UI bench (600 frames, fixed snapshot) and prints the views pass and tessellate times"
+dir = "{{config_root}}"
+run = "cargo run --release -p freecam-ui --example ui_bench"
+
+# Translation catalog: freecam/ui/i18n holds freecam.pot (written from FreecamMessage), the translators' <locale>.po
+# files, and packs/<locale>.json.
+
+[tasks."i18n:extract"]
+description = "Writes freecam/ui/i18n/freecam.pot from FreecamMessage"
+dir = "{{config_root}}"
+run = "cargo run -q -p freecam-ui --example freecam_i18n_extract"
+
+[tasks."i18n:check"]
+description = "Fails when freecam/ui/i18n/freecam.pot is out of date with FreecamMessage"
+dir = "{{config_root}}"
+run = "cargo run -q -p freecam-ui --example freecam_i18n_extract -- --check"
+
+[tasks."i18n:pseudo"]
+description = "Writes the en_XA pseudo-locale pack of freecam.pot into freecam/ui/i18n/packs/en_XA.json"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = [
+  "bash scripts/amml-i18n-tool.sh pseudo freecam/ui/i18n/freecam.pot freecam/ui/i18n/packs/en_XA.json",
+]
+
+[tasks.package]
+description = "Builds the AMML mod into dist/@alaydriem/freecam (alaydriem_freecam.dll, amml.hcl and the font licence OFL.txt)"
+dir = "{{config_root}}"
+shell = "bash -c"
+run = '''
+set -e
+cargo build --release -p freecam-amml
+rm -rf dist/alaydriem-freecam dist/@alaydriem/freecam
+mkdir -p dist/@alaydriem/freecam
+cp target/release/alaydriem_freecam.dll dist/@alaydriem/freecam/alaydriem_freecam.dll
+cp freecam/amml/amml.hcl dist/@alaydriem/freecam/amml.hcl
+# the DLL embeds the NordwandMono font from amml-ui; its licence ships beside it
+ui_manifest=$(cargo metadata --format-version 1 --locked | jq -r '.packages[] | select(.name == "amml-ui") | .manifest_path')
+cp "$(dirname "$ui_manifest")/assets/fonts/OFL.txt" dist/@alaydriem/freecam/OFL.txt
+echo "built dist/@alaydriem/freecam"
+'''
+
+[tools]
+# cargo metadata is read with it, to find the amml sources cargo fetched
+jq = "1.8.1"

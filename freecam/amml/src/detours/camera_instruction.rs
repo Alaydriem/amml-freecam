@@ -1,0 +1,18 @@
+use amml_sdk::DetourGuard;
+
+use crate::detours::handle_fn::HandleFn;
+use crate::services::FreecamRuntime;
+
+// void ClientNetworkHandler::handle(NetworkIdentifier const&, CameraInstructionPacket const&): every camera
+// instruction the client handles. The server's are reported to core before the original; the mod's own are not
+pub static GUARD: DetourGuard = DetourGuard::new("camera_instruction");
+
+#[allow(unsafe_code)]
+pub extern "C" fn detour(this: usize, id: usize, packet: usize) {
+    let original: HandleFn = GUARD.original_fn();
+    if let Some(runtime) = FreecamRuntime::get() {
+        runtime.on_camera_instruction(packet);
+    }
+    // SAFETY: `original` is the next function in the chain, with the hooked signature; the arguments are the game's
+    unsafe { original(this, id, packet) };
+}

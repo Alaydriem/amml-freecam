@@ -1,0 +1,41 @@
+[workspace]
+resolver = "3"
+members = ["freecam/core", "freecam/ui", "freecam/amml"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+authors = ["Charles R. Portwood II"]
+license = "BSD-3-Clause"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+crossbeam-queue = "0.3.14"
+thiserror = "2.0.21"
+tempfile = "3.27.0"
+stats_alloc = "0.1.10"
+egui = "=0.37.0"
+amm-abi = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.0" }
+amm-client = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.0" }
+amm-core = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.0" }
+amml-ui = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
+amml-i18n = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
+amml-i18n-tool = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
+amml-ui-rules = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
+amml-sdk = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
+amml-game = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
+amml-msvc = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
+parking_lot = "0.12.5"
+windows-sys = "0.61.2"
+curia = "=0.2.2"
+hcl-rs = "=0.19.8"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+freecam-core = { path = "freecam/core" }
+freecam-ui = { path = "freecam/ui" }
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

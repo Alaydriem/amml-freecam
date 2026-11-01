@@ -1,0 +1,48 @@
+[package]
+name = "freecam-amml"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+publish.workspace = true
+autotests = false
+
+[lib]
+name = "alaydriem_freecam"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+amm-abi.workspace = true
+amm-client.workspace = true
+amm-core = { workspace = true, features = ["egui"] }
+amml-game.workspace = true
+amml-i18n.workspace = true
+amml-msvc.workspace = true
+amml-sdk.workspace = true
+amml-ui.workspace = true
+chrono.workspace = true
+curia.workspace = true
+egui.workspace = true
+freecam-core.workspace = true
+freecam-ui.workspace = true
+parking_lot.workspace = true
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+amm-client = { workspace = true, features = ["test-support"] }
+hcl-rs.workspace = true
+stats_alloc.workspace = true
+tempfile.workspace = true
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[lints]
+workspace = true
