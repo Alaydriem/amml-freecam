@@ -1,7 +1,7 @@
 namespace         = "alaydriem"
 name              = "freecam"
 display_name      = "Freecam"
-version           = "26.60.0"
+version           = "26.60.5"
 author            = "Alaydriem"
 config_path       = "config.hcl"
 input_passthrough = [27, 112]
