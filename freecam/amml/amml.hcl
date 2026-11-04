@@ -58,3 +58,17 @@ entries = [
   "BlockSource.fetchEntities",
   "Actor.aabbShapeComponent",
 ]
+
+listing {
+  title       = "Freecam"
+  summary     = "Free camera with keyframed camera paths for recording smooth shots."
+  description = <<-EOT
+    A free camera mod to look at builds and scout out areas independently of your player position. It also has basic cinematic tools: create simple keyframe paths and quickly take screenshots.
+  EOT
+  authors     = ["Charles R. Portwood II"]
+  license     = "BSD-3-Clause"
+  source      = "https://github.com/alaydriem/amml-freecam"
+  homepage    = "https://github.com/alaydriem/amml-freecam#readme"
+  tags        = ["freecam", "camera", "cinematic", "recording", "client"]
+  icon        = "icon.png"
+}
