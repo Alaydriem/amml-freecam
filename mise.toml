@@ -1,5 +1,5 @@
 [tasks.preflight]
-description = "Names a missing Rust toolchain or cargo-nextest before a build turns it into an obscure error"
+description = "Names a missing toolchain or tool before a build turns it into an obscure error"
 dir = "{{config_root}}"
 run = [
   "rustc --version",
@@ -8,7 +8,7 @@ run = [
 ]
 
 [tasks.check]
-description = "cargo check, clippy with warnings denied, and rustfmt check over the workspace"
+description = "Compiles, runs clippy with warnings denied and checks formatting"
 dir = "{{config_root}}"
 run = [
   "cargo check --workspace --all-targets",
@@ -17,7 +17,7 @@ run = [
 ]
 
 [tasks.test]
-description = "Every workspace test through cargo-nextest"
+description = "Every test through cargo nextest run"
 dir = "{{config_root}}"
 run = "cargo nextest run --workspace"
 
@@ -48,7 +48,7 @@ run = [
 ]
 
 [tasks.package]
-description = "Builds the AMML mod into dist/@alaydriem/freecam (alaydriem_freecam.dll, amml.hcl and the font licence OFL.txt)"
+description = "Builds dist/@alaydriem/freecam/ (alaydriem_freecam.dll, amml.hcl, OFL.txt), the release artifact"
 dir = "{{config_root}}"
 shell = "bash -c"
 run = '''
@@ -67,3 +67,22 @@ echo "built dist/@alaydriem/freecam"
 [tools]
 # cargo metadata is read with it, to find the amml sources cargo fetched
 jq = "1.8.1"
+
+[tasks.install]
+description = "Runs package, then copies dist/@alaydriem/freecam into mods/amml/@alaydriem/freecam of an AMML instance under %LOCALAPPDATA%/amml/instances (--instance, default 1.26.60.05). The mod's config/ stays. Close the game first: a running game locks the DLL"
+depends = ["package"]
+dir = "{{config_root}}"
+shell = "bash -c"
+usage = '''
+flag "--instance <name>" default="1.26.60.05" help="The instance folder under %LOCALAPPDATA%/amml/instances"
+'''
+run = '''
+set -e
+[ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the instances live under %LOCALAPPDATA%/amml/instances"; exit 1; }
+instance="$LOCALAPPDATA/amml/instances/${usage_instance:-1.26.60.05}"
+[ -f "$instance/Minecraft.Windows.exe" ] || { echo "no instance at $instance"; exit 1; }
+target="$instance/mods/amml/@alaydriem/freecam"
+mkdir -p "$target"
+cp -r dist/@alaydriem/freecam/. "$target/"
+echo "installed dist/@alaydriem/freecam -> $target"
+'''

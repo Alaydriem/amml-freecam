@@ -18,16 +18,16 @@ thiserror = "2.0.21"
 tempfile = "3.27.0"
 stats_alloc = "0.1.10"
 egui = "=0.37.0"
-amm-abi = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.0" }
-amm-client = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.0" }
-amm-core = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.0" }
-amml-ui = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
-amml-i18n = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
-amml-i18n-tool = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
-amml-ui-rules = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
-amml-sdk = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
-amml-game = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
-amml-msvc = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.0" }
+amm-abi = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.5" }
+amm-client = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.5" }
+amm-core = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.5" }
+amml-ui = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.5" }
+amml-i18n = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.5" }
+amml-i18n-tool = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.5" }
+amml-ui-rules = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.5" }
+amml-sdk = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.5" }
+amml-game = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.5" }
+amml-msvc = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.5" }
 parking_lot = "0.12.5"
 windows-sys = "0.61.2"
 curia = "=0.2.2"
