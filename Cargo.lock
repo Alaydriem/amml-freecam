@@ -40,8 +40,8 @@ dependencies = [
 
 [[package]]
 name = "amm-abi"
-version = "26.60.5"
-source = "git+https://github.com/Alaydriem/amml-modmanager.git?tag=26.60.5#9cf8636bcea149f736f3691362bf850b91027719"
+version = "26.60.6"
+source = "git+https://github.com/Alaydriem/amml-modmanager.git?tag=26.60.6#7f827608abd84c41458c0aa1bc2b70c801d7099d"
 dependencies = [
  "amm-core",
  "bytemuck",
@@ -49,8 +49,8 @@ dependencies = [
 
 [[package]]
 name = "amm-client"
-version = "26.60.5"
-source = "git+https://github.com/Alaydriem/amml-modmanager.git?tag=26.60.5#9cf8636bcea149f736f3691362bf850b91027719"
+version = "26.60.6"
+source = "git+https://github.com/Alaydriem/amml-modmanager.git?tag=26.60.6#7f827608abd84c41458c0aa1bc2b70c801d7099d"
 dependencies = [
  "amm-abi",
  "amm-core",
@@ -68,8 +68,8 @@ dependencies = [
 
 [[package]]
 name = "amm-core"
-version = "26.60.5"
-source = "git+https://github.com/Alaydriem/amml-modmanager.git?tag=26.60.5#9cf8636bcea149f736f3691362bf850b91027719"
+version = "26.60.6"
+source = "git+https://github.com/Alaydriem/amml-modmanager.git?tag=26.60.6#7f827608abd84c41458c0aa1bc2b70c801d7099d"
 dependencies = [
  "amml-abi",
  "arc-swap",
@@ -542,7 +542,7 @@ dependencies = [
 
 [[package]]
 name = "freecam-amml"
-version = "26.60.5"
+version = "26.60.6"
 dependencies = [
  "amm-abi",
  "amm-client",
@@ -566,7 +566,7 @@ dependencies = [
 
 [[package]]
 name = "freecam-core"
-version = "26.60.5"
+version = "26.60.6"
 dependencies = [
  "amm-core",
  "curia",
@@ -577,7 +577,7 @@ dependencies = [
 
 [[package]]
 name = "freecam-ui"
-version = "26.60.5"
+version = "26.60.6"
 dependencies = [
  "amml-i18n",
  "amml-i18n-tool",
