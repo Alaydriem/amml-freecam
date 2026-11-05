@@ -3,7 +3,7 @@ resolver = "3"
 members = ["freecam/core", "freecam/ui", "freecam/amml"]
 
 [workspace.package]
-version = "26.60.5"
+version = "26.60.6"
 edition = "2024"
 rust-version = "1.98"
 authors = ["Charles R. Portwood II"]
@@ -18,9 +18,9 @@ thiserror = "2.0.21"
 tempfile = "3.27.0"
 stats_alloc = "0.1.10"
 egui = "=0.37.0"
-amm-abi = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.5" }
-amm-client = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.5" }
-amm-core = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.5" }
+amm-abi = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.6" }
+amm-client = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.6" }
+amm-core = { git = "https://github.com/Alaydriem/amml-modmanager.git", tag = "26.60.6" }
 amml-ui = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.5" }
 amml-i18n = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.5" }
 amml-i18n-tool = { git = "https://github.com/Alaydriem/amml.git", tag = "26.60.5" }

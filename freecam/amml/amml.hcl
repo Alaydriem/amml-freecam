@@ -2,6 +2,7 @@ namespace   = "alaydriem"
 name        = "freecam"
 entry       = "alaydriem_freecam.dll"
 api_version = 2
+amml_version = "26.60.6"
 entries = [
   # required: freecam refuses to enable without them
   "ClientInstance.update",
