@@ -26,25 +26,25 @@ description = "Runs the headless UI bench (600 frames, fixed snapshot) and print
 dir = "{{config_root}}"
 run = "cargo run --release -p freecam-ui --example ui_bench"
 
-# Translation catalog: freecam/ui/i18n holds freecam.pot (written from FreecamMessage), the translators' <locale>.po
+# Translation catalog: src/ui/i18n holds freecam.pot (written from FreecamMessage), the translators' <locale>.po
 # files, and packs/<locale>.json.
 
 [tasks."i18n:extract"]
-description = "Writes freecam/ui/i18n/freecam.pot from FreecamMessage"
+description = "Writes src/ui/i18n/freecam.pot from FreecamMessage"
 dir = "{{config_root}}"
 run = "cargo run -q -p freecam-ui --example freecam_i18n_extract"
 
 [tasks."i18n:check"]
-description = "Fails when freecam/ui/i18n/freecam.pot is out of date with FreecamMessage"
+description = "Fails when src/ui/i18n/freecam.pot is out of date with FreecamMessage"
 dir = "{{config_root}}"
 run = "cargo run -q -p freecam-ui --example freecam_i18n_extract -- --check"
 
 [tasks."i18n:pseudo"]
-description = "Writes the en_XA pseudo-locale pack of freecam.pot into freecam/ui/i18n/packs/en_XA.json"
+description = "Writes the en_XA pseudo-locale pack of freecam.pot into src/ui/i18n/packs/en_XA.json"
 dir = "{{config_root}}"
 shell = "bash -c"
 run = [
-  "bash scripts/amml-i18n-tool.sh pseudo freecam/ui/i18n/freecam.pot freecam/ui/i18n/packs/en_XA.json",
+  "bash scripts/amml-i18n-tool.sh pseudo src/ui/i18n/freecam.pot src/ui/i18n/packs/en_XA.json",
 ]
 
 [tasks.package]
@@ -54,14 +54,15 @@ shell = "bash -c"
 run = '''
 set -e
 cargo build --release -p freecam-amml
-rm -rf dist/alaydriem-freecam dist/@alaydriem/freecam
+rm -rf dist/@alaydriem/freecam
 mkdir -p dist/@alaydriem/freecam
 cp target/release/alaydriem_freecam.dll dist/@alaydriem/freecam/alaydriem_freecam.dll
-cp freecam/amml/amml.hcl dist/@alaydriem/freecam/amml.hcl
-cp freecam/amml/icon.png dist/@alaydriem/freecam/icon.png
+cp src/amml/amml.hcl dist/@alaydriem/freecam/amml.hcl
+cp src/amml/icon.png dist/@alaydriem/freecam/icon.png
 # the DLL embeds the NordwandMono font from amml-ui; its licence ships beside it
 ui_manifest=$(cargo metadata --format-version 1 --locked | jq -r '.packages[] | select(.name == "amml-ui") | .manifest_path')
 cp "$(dirname "$ui_manifest")/assets/fonts/OFL.txt" dist/@alaydriem/freecam/OFL.txt
+if find dist -name '*.pdb' | grep -q .; then echo "a .pdb is in dist/; debug symbols are never shipped"; exit 1; fi
 echo "built dist/@alaydriem/freecam"
 '''
 
@@ -70,17 +71,17 @@ echo "built dist/@alaydriem/freecam"
 jq = "1.8.1"
 
 [tasks.install]
-description = "Runs package, then copies dist/@alaydriem/freecam into mods/amml/@alaydriem/freecam of an AMML instance under %LOCALAPPDATA%/amml/instances (--instance, default 1.26.60.05). The mod's config/ stays. Close the game first: a running game locks the DLL"
+description = "Runs package, then copies dist/@alaydriem/freecam into mods/amml/@alaydriem/freecam of an AMML instance under %LOCALAPPDATA%/amml/instances (--instance, required). The mod's config/ stays. Close the game first: a running game locks the DLL"
 depends = ["package"]
 dir = "{{config_root}}"
 shell = "bash -c"
 usage = '''
-flag "--instance <name>" default="1.26.60.05" help="The instance folder under %LOCALAPPDATA%/amml/instances"
+flag "--instance <name>" required=#true help="The instance folder under %LOCALAPPDATA%/amml/instances"
 '''
 run = '''
 set -e
 [ -n "$LOCALAPPDATA" ] || { echo "LOCALAPPDATA is not set; the instances live under %LOCALAPPDATA%/amml/instances"; exit 1; }
-instance="$LOCALAPPDATA/amml/instances/${usage_instance:-1.26.60.05}"
+instance="$LOCALAPPDATA/amml/instances/${usage_instance:?--instance is required}"
 [ -f "$instance/Minecraft.Windows.exe" ] || { echo "no instance at $instance"; exit 1; }
 target="$instance/mods/amml/@alaydriem/freecam"
 mkdir -p "$target"

@@ -35,4 +35,4 @@ jobs:
       namespace: alaydriem
       name: freecam
       package_task: package
-      descriptor: freecam/amml/descriptor.hcl
+      descriptor: src/amml/descriptor.hcl

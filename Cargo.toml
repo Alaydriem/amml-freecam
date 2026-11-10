@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["freecam/core", "freecam/ui", "freecam/amml"]
+members = ["src/core", "src/ui", "src/amml"]
 
 [workspace.package]
 version = "26.62.0"
@@ -33,8 +33,8 @@ windows-sys = "0.61.2"
 curia = "=0.2.2"
 hcl-rs = "=0.19.8"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
-freecam-core = { path = "freecam/core" }
-freecam-ui = { path = "freecam/ui" }
+freecam-core = { path = "src/core" }
+freecam-ui = { path = "src/ui" }
 
 [workspace.lints.clippy]
 unwrap_used = "deny"
