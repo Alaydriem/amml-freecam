@@ -1,185 +1,216 @@
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use amml_game::{Actor, ClientInstance, StopLatch};
-use freecam_core::structs::{CameraCommand, FrameOutput, FrameStatus, MarkerEntry};
+use amml_api::amml_abi::{AmmlOrigin, CameraSetup};
+use amml_api::{CameraSetupExt, Client, Ctx, EventCtx, InstructionKind, Logger};
+use freecam_core::structs::{CameraPose, FrameOutput, FrameStatus, MarkerEntry, ServerInstruction};
 
-use crate::services::FrameStatusReader;
-use crate::types::{FrameContext, ThreadId};
+use crate::services::{
+    CameraDriver, CameraWatch, FlightProbe, FrameStatusReader, FreecamSession, InputBridge, LookRay, MarkerDelivery,
+};
+use crate::types::InputItem;
 
-// runs core once per frame and carries out what it asks: the marker batch, the look ray, the camera instruction and
-// the render override. In a world the frame runs before setupCamera; outside one it runs from the client update
+// runs core once per frame and carries out what it asks: the marker batch, the look ray, the free camera and the
+// rendered pose. In a world the frame runs in `CameraSetup` Before (game thread); outside one it runs from
+// `ClientTick`. Everything here is game thread, behind the runtime's lock
 pub struct FrameDriver {
+    ctx: Ctx,
+    log: Logger,
+    session: FreecamSession,
+    camera: CameraDriver,
+    delivery: MarkerDelivery,
+    watch: CameraWatch,
+    probe: FlightProbe,
     // the frame's marker batch; sized once, at the session's marker capacity
     markers: Vec<MarkerEntry>,
-    // the time the last batch took to deliver, for the next status; 0 when nothing went out
-    last_shape_send_us: f32,
-    setup_thread_logged: bool,
-    update_thread_logged: bool,
-    tick_thread_logged: bool,
+    inputs: Vec<InputItem>,
+    // the pose of the running frame, for a second camera setup in the same frame
+    pose: Option<CameraPose>,
+    camera_owned: bool,
+    off_thread_logged: bool,
+    // world frames of the running flight, for the heartbeat lines
+    flight_frames: u64,
 }
 
 impl FrameDriver {
-    pub fn new(marker_capacity: usize) -> Self {
+    // the world frame counts of a flight that give a heartbeat line, so a run shows the frames still run
+    pub const HEARTBEATS: [u64; 2] = [120, 1200];
+
+    pub fn new(ctx: Ctx, session: FreecamSession) -> Self {
+        let capacity = session.marker_capacity();
         Self {
-            markers: Vec::with_capacity(marker_capacity),
-            last_shape_send_us: 0.0,
-            setup_thread_logged: false,
-            update_thread_logged: false,
-            tick_thread_logged: false,
+            ctx,
+            log: ctx.log(),
+            session,
+            camera: CameraDriver::new(),
+            delivery: MarkerDelivery::new(),
+            watch: CameraWatch::new(),
+            probe: FlightProbe::new(),
+            markers: Vec::with_capacity(capacity),
+            inputs: Vec::with_capacity(crate::services::InputQueue::CAPACITY),
+            pose: None,
+            camera_owned: false,
+            off_thread_logged: false,
+            flight_frames: 0,
         }
     }
 
-    // before setupCamera, in a world or out of one
-    pub fn before_setup_camera(
+    // `CameraSetup` Before: the world frame, once per frame; a later setup of the same frame gets the same pose
+    pub fn world_frame(
         &mut self,
-        context: FrameContext<'_>,
-        client: &ClientInstance<'_>,
-    ) -> Option<FrameOutput> {
-        Self::note_thread(&mut self.setup_thread_logged, "the frame (setupCamera)");
-        let player = client.local_player();
-        context.capture.observe_local_player(player.is_some());
-        let rendered = context.render.take_rendered();
-        let game = context.game;
-        let status = context.reader.read(
-            client,
-            &game.instructions,
-            context.capture,
-            &game.watch,
-            rendered,
-            context.camera_owned,
-        );
-        let output = self.run(context, status)?;
-        self.answer_ray(context, &output, player.as_ref());
-        Self::apply_camera(context, &output);
-        context.render.set(output.render_override);
-        Some(output)
-    }
-
-    // after the client update: outside a world the frame runs here, since setupCamera does not run then
-    pub fn tick(&mut self, context: FrameContext<'_>, client: &ClientInstance<'_>) -> Option<FrameOutput> {
-        Self::note_thread(&mut self.update_thread_logged, "the client update");
-        let player = client.local_player();
-        if player.is_some() && client.is_world_active() {
-            return None;
-        }
-        Self::note_thread(&mut self.tick_thread_logged, "the frame (client update)");
-        context.capture.observe_local_player(player.is_some());
-        let status = FrameStatusReader::outside_world(
-            FrameStatusReader::now_seconds(),
-            FrameStatusReader::game_window_focused(),
-        );
-        let output = self.run(context, status)?;
-        // no world is active here, so there is nothing to cast through
-        self.answer_ray(context, &output, None);
-        context.render.set(output.render_override);
-        Some(output)
-    }
-
-    // disable, before the hooks go: the camera goes back to the player (when freecam holds it) and every live marker
-    // is removed. Nothing goes out once the stop latch is raised (the game is closing, or a hook body panicked), when
-    // no local player is there, no handler is captured or this is not the capture thread. Returns whether the clear
-    // went out and how many removes did
-    pub fn shutdown(
-        &mut self,
-        context: FrameContext<'_>,
-        client: Option<&ClientInstance<'_>>,
-        camera_owned: bool,
-        latch: &StopLatch,
-    ) -> (bool, usize) {
-        if latch.raised() {
-            curia::info!("shutdown: the stop latch is raised; nothing is sent");
-            return (false, 0);
-        }
-        context.session.shutdown_markers(&mut self.markers);
-        let world_live = client.is_some_and(|client| client.local_player().is_some());
-        if !world_live {
-            if camera_owned || !self.markers.is_empty() {
-                curia::warn!("shutdown: no world, so the camera and the markers stay as they are", {
-                    markers: self.markers.len(),
-                });
+        event: &CameraSetup,
+        at: &EventCtx,
+        reader: &FrameStatusReader,
+        input: &InputBridge,
+        focus_lost: &AtomicBool,
+    ) {
+        // `None` only from a loader without the camera table: the frame then runs without the rendered pose
+        let camera = event.camera();
+        if !event.first_in_frame() {
+            if let Some(camera) = &camera {
+                self.camera.set_pose(camera, self.pose, &self.log);
             }
-            return (false, 0);
-        }
-        let cleared = camera_owned && context.game.instructions.send_clear(context.capture);
-        let removed = match &context.game.shapes {
-            Some(shapes) if !self.markers.is_empty() && shapes.deliver(context.capture, &self.markers) => {
-                self.markers.len()
-            }
-            _ => 0,
-        };
-        if removed < self.markers.len() {
-            curia::warn!("shutdown: markers not removed (no captured handler, or another thread)", {
-                markers: self.markers.len(),
-            });
-        }
-        curia::info!("shutdown", { camera_cleared: cleared, markers_removed: removed });
-        (cleared, removed)
-    }
-
-    // asks core for this frame with the delivery status, then delivers its marker batch
-    fn run(&mut self, context: FrameContext<'_>, mut status: FrameStatus) -> Option<FrameOutput> {
-        status.last_shape_send_us = self.last_shape_send_us;
-        status.handler_generation = context.capture.delivery_generation();
-        let output = context.session.frame(&status, &mut self.markers)?;
-        self.deliver_markers(context);
-        Some(output)
-    }
-
-    fn deliver_markers(&mut self, context: FrameContext<'_>) {
-        let mut elapsed = 0.0f32;
-        if !self.markers.is_empty()
-            && let Some(shapes) = &context.game.shapes
-        {
-            let start = Instant::now();
-            if shapes.deliver(context.capture, &self.markers) {
-                elapsed = start.elapsed().as_secs_f32() * 1_000_000.0;
-            }
-        }
-        self.last_shape_send_us = elapsed;
-    }
-
-    // answers the ray this frame asked for; with no local player, no block source or look-at off, a miss
-    #[allow(unsafe_code)]
-    fn answer_ray(&self, context: FrameContext<'_>, output: &FrameOutput, player: Option<&Actor<'_>>) {
-        let Some(ray) = output.ray else { return };
-        let hit = match (player, &context.game.look) {
-            (Some(player), Some(look)) => player.block_source().and_then(|region| {
-                // SAFETY: the live local player of this frame and its block source, on the game thread
-                unsafe {
-                    look.cast(
-                        context.capture,
-                        player.as_ptr(),
-                        region.as_ptr(),
-                        ray.origin,
-                        ray.direction,
-                        ray.max_distance,
-                    )
-                }
-            }),
-            _ => None,
-        };
-        let _ = context.session.ray_result(hit);
-    }
-
-    fn apply_camera(context: FrameContext<'_>, output: &FrameOutput) {
-        let instructions = &context.game.instructions;
-        match output.camera {
-            CameraCommand::Set(pose) => {
-                instructions.send_set(context.capture, &pose);
-            }
-            CameraCommand::Clear => {
-                instructions.send_clear(context.capture);
-            }
-            CameraCommand::None => {}
-        }
-    }
-
-    // one line per call site with the id of the thread that runs it
-    fn note_thread(logged: &mut bool, site: &str) {
-        if *logged {
             return;
         }
-        *logged = true;
-        curia::info!("thread of a call site", { site: site, thread: ThreadId::current() });
+        let Some(client) = at.client() else {
+            if !self.off_thread_logged {
+                self.off_thread_logged = true;
+                self.log.warn("camera setup is off the game thread; the world frame does not run", &[]);
+            }
+            return;
+        };
+        let control = self.ctx.camera();
+        let kind = control.active_camera(&client);
+        let player_camera = self.watch.player_camera_active(kind);
+        if let Some(name) = self.watch.take_changed() {
+            self.log.info("camera watch", &[("kind", name)]);
+        }
+        let free_available = control.free_available() == Some(true);
+        self.heartbeat();
+        let rendered = camera.as_ref().and_then(|camera| camera.rendered_position());
+        let focused = Self::take_focus(focus_lost);
+        let mut status = reader.read(&client, focused, free_available, player_camera, rendered);
+        let Some(output) = self.run(&mut status, input) else { return };
+        self.answer_ray(&output, Some(&client));
+        self.camera.command(&control, output.camera, &self.log);
+        self.pose = output.render_override;
+        if let Some(camera) = &camera {
+            self.camera.set_pose(camera, self.pose, &self.log);
+        }
+    }
+
+    // `ClientTick`: outside a world the frame runs here, since no camera setup comes then
+    pub fn outside_frame(
+        &mut self,
+        at: &EventCtx,
+        reader: &FrameStatusReader,
+        input: &InputBridge,
+        focus_lost: &AtomicBool,
+    ) {
+        if let Some(client) = at.client()
+            && Self::in_world(&client)
+        {
+            return;
+        }
+        let mut status = reader.outside_world(Self::take_focus(focus_lost));
+        let Some(output) = self.run(&mut status, input) else { return };
+        // no world is active here, so there is nothing to cast through
+        self.answer_ray(&output, None);
+        self.camera.command(&self.ctx.camera(), output.camera, &self.log);
+        self.pose = output.render_override;
+    }
+
+    // a camera instruction reached the client handler. The server's (`GAME`) end the flight; this mod's own echo is
+    // not passed on; another mod's free camera call is passed as not the server's
+    pub fn camera_instruction(&mut self, kind: InstructionKind, origin: AmmlOrigin) {
+        if origin == AmmlOrigin::THIS_MOD {
+            return;
+        }
+        let from_game = origin == AmmlOrigin::GAME;
+        if from_game {
+            self.watch.on_server_instruction(kind);
+        }
+        let kind = match kind {
+            InstructionKind::Set | InstructionKind::Clear => ServerInstruction::SetOrClear,
+            _ => ServerInstruction::Other,
+        };
+        if from_game && kind == ServerInstruction::SetOrClear && self.camera_owned {
+            self.log.info("flight stopped", &[("reason", "server_camera"), ("origin", "game")]);
+        }
+        let _ = self.session.server_instruction(kind, !from_game);
+    }
+
+    // camera instructions dropped at the bound of the runtime's list since the last frame
+    pub fn instructions_dropped(&self, count: u32) {
+        self.log.warn("camera instructions dropped", &[("count", &count.to_string())]);
+    }
+
+    // `WorldLeft`: the loader forgot the free camera, the pose and the shapes; the server camera goes with the world
+    pub fn world_left(&mut self) {
+        self.camera.forget();
+        self.watch.reset();
+        self.pose = None;
+    }
+
+    // asks core for this frame with the delivery status, then delivers its marker batch and logs the probes
+    fn run(&mut self, status: &mut FrameStatus, input: &InputBridge) -> Option<FrameOutput> {
+        let shapes = self.ctx.world_shapes();
+        status.last_shape_send_us = self.delivery.last_send_us();
+        status.handler_generation = MarkerDelivery::target_epoch(&shapes);
+        if !status.focused {
+            input.release_held();
+        }
+        input.drain(&mut self.inputs);
+        let frame = self.session.frame(status, &self.inputs, input.lingering(), &mut self.markers)?;
+        if let Some(keys) = &frame.keys {
+            input.set_keys(keys);
+        }
+        input.set_gate(frame.holding, frame.panel_open, &self.log);
+        if status.in_world
+            && let Some((delivered, dimension)) = self.delivery.deliver(&shapes, &self.markers)
+            && delivered > 0
+        {
+            self.log.info(
+                "markers applied",
+                &[("delivered", &delivered.to_string()), ("dimension", &dimension.to_string())],
+            );
+        }
+        let output = frame.output;
+        let position = output.render_override.map(|pose| pose.position);
+        self.probe.inputs(&self.inputs, position, &self.log);
+        self.probe.points(frame.point_count, &self.log);
+        self.probe.focus(status.focused, output.camera_owned, &self.log);
+        self.camera_owned = output.camera_owned;
+        Some(output)
+    }
+
+    // answers the ray this frame asked for; with no local player or no block source, a miss
+    fn answer_ray(&mut self, output: &FrameOutput, client: Option<&Client<'_>>) {
+        let Some(ray) = output.ray else { return };
+        let source = client.and_then(|client| client.local_player()).and_then(|player| player.block_source());
+        let hit = source.and_then(|source| LookRay::cast(&source, ray.origin, ray.direction, ray.max_distance));
+        self.log.info("look-at ray answered", &[("hit", if hit.is_some() { "block_or_actor" } else { "none" })]);
+        let _ = self.session.ray_result(hit);
+    }
+
+    // counts the world frames of a flight (the flag is the one of the last frame)
+    fn heartbeat(&mut self) {
+        if !self.camera_owned {
+            self.flight_frames = 0;
+            return;
+        }
+        self.flight_frames += 1;
+        if Self::HEARTBEATS.contains(&self.flight_frames) {
+            self.log.debug("world frames running", &[("count", &self.flight_frames.to_string())]);
+        }
+    }
+
+    // false once after a focus loss: only a frame that runs core takes the loss, so a client tick in a world (which
+    // runs no frame) does not drop it
+    fn take_focus(focus_lost: &AtomicBool) -> bool {
+        !focus_lost.swap(false, Ordering::Relaxed)
+    }
+
+    fn in_world(client: &Client<'_>) -> bool {
+        client.world_active() == Some(true) && client.local_player().is_some()
     }
 }

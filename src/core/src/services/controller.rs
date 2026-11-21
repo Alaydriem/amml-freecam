@@ -11,8 +11,8 @@ use crate::services::{
 };
 use crate::structs::{
     CameraCommand, CameraPose, FrameOutput, FrameStatus, FreecamAction, FreecamState, KeyEdit, MarkerEntry,
-    ScreenshotStep, ServerInstruction, StartLeases, StartRefusal, TelemetryReport, ToastKind, UiAction, UiLegend,
-    UiSnapshot, UiTimingSummary, Vec3,
+    PointerButton, ScreenshotStep, ServerInstruction, StartLeases, StartRefusal, TelemetryReport, ToastKind, UiAction,
+    UiLegend, UiSnapshot, UiTimingSummary, Vec3,
 };
 
 // relative FOV or aspect change that resizes the marker boxes
@@ -133,34 +133,47 @@ impl FreecamController {
                     self.on_keybind(action, phase);
                 }
             }
-            ModEvent::PointerDelta { dx, dy } => {
-                // mouse-look runs outside bar mode, and in bar mode during a look drag
-                let looking = !self.cursor_mode || self.drag.is_active();
-                self.input.on_pointer_delta(dx, dy, self.is_active() && looking, self.menu_open);
-            }
-            ModEvent::Wheel { delta } => {
-                // in bar mode a wheel notch over the UI goes to the UI and leaves the speed alone
-                if !(self.cursor_mode && self.pointer_over_ui) {
-                    self.input.on_wheel(delta, self.is_active(), self.menu_open);
-                }
-            }
-            ModEvent::PointerButton { button, down, .. } => {
-                let can_drag =
-                    self.cursor_mode && self.state == FreecamState::On && !self.menu_open && !self.pointer_over_ui;
-                self.drag.on_button(button, down, can_drag);
-            }
             ModEvent::Suspended { capability, .. } | ModEvent::Revoked { capability, .. }
                 if matches!(capability, Capability::Camera | Capability::Input) =>
             {
-                self.lease_lost = true;
-                self.input.clear_held();
+                self.lose_lease();
             }
+            ModEvent::InputLeaseSuspended | ModEvent::InputLeaseLost => self.lose_lease(),
             ModEvent::Disabled => {
                 self.disabled = true;
                 self.input.clear_held();
             }
             _ => {}
         }
+    }
+
+    // a bind the mod layer matched itself, as a manager keybind of the same action and phase
+    pub fn on_bind(&mut self, action: FreecamAction, phase: KeybindPhase) {
+        self.on_keybind(action, phase);
+    }
+
+    // raw mouse counts; mouse-look runs outside bar mode, and in bar mode during a look drag
+    pub fn on_look_counts(&mut self, dx: f32, dy: f32) {
+        let looking = !self.cursor_mode || self.drag.is_active();
+        self.input.on_pointer_delta(dx, dy, self.is_active() && looking, self.menu_open);
+    }
+
+    // wheel notches; in bar mode a notch over the UI goes to the UI and leaves the speed alone
+    pub fn on_wheel(&mut self, notches: f32) {
+        if !(self.cursor_mode && self.pointer_over_ui) {
+            self.input.on_wheel(notches, self.is_active(), self.menu_open);
+        }
+    }
+
+    // a mouse button went down or up; a right press away from the UI in bar mode starts a look drag
+    pub fn on_button(&mut self, button: PointerButton, down: bool) {
+        let can_drag = self.cursor_mode && self.state == FreecamState::On && !self.menu_open && !self.pointer_over_ui;
+        self.drag.on_button(button, down, can_drag);
+    }
+
+    fn lose_lease(&mut self) {
+        self.lease_lost = true;
+        self.input.clear_held();
     }
 
     // a flight keybind is held from Pressed to Released; every other action runs once on Pressed

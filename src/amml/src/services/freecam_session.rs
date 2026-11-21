@@ -1,16 +1,14 @@
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 
-use amm_client::link::{ApiTable, ManagerLink};
+use amm_client::link::ManagerLink;
 use amm_core::errors::LinkError;
-use freecam_core::services::FreecamController;
+use amml_api::{Area, Ctx};
+use freecam_core::config::KeyConfig;
 use freecam_core::structs::{FrameOutput, FrameStatus, MarkerEntry, ServerInstruction, Vec3};
 
-use crate::services::{
-    FreecamDescriptor, FreecamFrameHandler, HandleState, LinkSession, RenderClock, ScreenshotPath, ScreenshotRelay,
-    UiHandoff,
-};
+use crate::services::{FreecamDescriptor, FreecamFrameHandler, HandleState, LinkSession, RenderClock, UiHandoff};
+use crate::types::{InputItem, SessionFrame};
 
 // freecam's registration with the mod manager and its controller.
 // - state: the controller and the mod manager link, game thread only
@@ -27,51 +25,28 @@ pub struct FreecamSession {
 }
 
 impl FreecamSession {
-    // registers with the mod manager behind `table` and reads the config it keeps in `config_dir`; game thread, from
-    // the mod's enable or a later tick, never from load
-    pub fn create(table: ApiTable, config_dir: &Path) -> Result<FreecamSession, LinkError> {
+    // starts the link to the mod manager with freecam's egui pass; call it in `enable`. The link connects itself when
+    // the manager's tables are published, and the first frame after that reads config.hcl
+    pub fn start(ctx: &Ctx) -> Result<FreecamSession, LinkError> {
         let handoff = Arc::new(Mutex::new(UiHandoff::new()));
         let clock = Arc::new(RenderClock::new());
         let handler = FreecamFrameHandler::new(Arc::clone(&handoff), Arc::clone(&clock));
-        let link = ManagerLink::new(table, FreecamDescriptor::DESCRIPTOR, config_dir, handler)?;
-        let session = LinkSession::new(link);
-        session.apply_locale();
-        let config = session.config();
-        clock.set_measure(config.telemetry);
-        let folder = config.screenshot.clone().sanitized().folder;
-        let relay = ScreenshotRelay::new(ScreenshotPath::new(&folder, |name| std::env::var(name).ok()));
-        let mut controller = FreecamController::new(config);
-        controller.set_can_screenshot(session.can_screenshot());
-        curia::info!("freecam registered with the mod manager", { screenshots: session.can_screenshot() });
-        Ok(Self {
-            state: Mutex::new(HandleState::new(controller, session, relay)),
-            handoff,
-            clock,
-            poison_logged: AtomicBool::new(false),
-        })
+        let link = ManagerLink::start(ctx, FreecamDescriptor::DESCRIPTOR, Some(handler))?;
+        let state = HandleState::new(LinkSession::new(link), ctx.log(), ctx.supports(Area::OVERLAY_SCREENSHOT));
+        Ok(Self { state: Mutex::new(state), handoff, clock, poison_logged: AtomicBool::new(false) })
     }
 
-    // None when a panic poisoned the lock
-    pub fn with_controller<R>(&self, body: impl FnOnce(&mut FreecamController) -> R) -> Option<R> {
-        self.with_state(|state| body(state.controller_mut()))
-    }
-
-    // a camera instruction reached the client; it is the server's only while no other mod holds the Camera lease.
-    // None when a panic poisoned the state lock
-    pub fn server_instruction(&self, kind: ServerInstruction) -> Option<()> {
-        self.with_state(|state| state.server_instruction(kind))
-    }
-
-    // the answer to the ray the last frame asked for: the hit point, or None for a miss
-    pub fn ray_result(&self, hit: Option<Vec3>) -> Option<()> {
-        self.with_controller(|controller| controller.on_ray_result(hit))
-    }
-
-    // game thread: drains the manager's events into core, answers a start with the flight leases, runs the core frame,
-    // then applies the cursor and gives the leases back once freecam is off. The UI hand-off is a try_lock held for a
-    // copy only; when it is busy that side waits for the next frame. `markers` receives the frame's marker batch (it
-    // is cleared first and gets at most the configured marker capacity). None when a panic poisoned the state lock
-    pub fn frame(&self, status: &FrameStatus, markers: &mut Vec<MarkerEntry>) -> Option<FrameOutput> {
+    // game thread: connects once the manager is there, drains the manager's events and the queued inputs into core,
+    // answers a start with the flight leases, runs the core frame, then applies the cursor and gives the leases back
+    // once freecam is off. `lingering` names the actions whose manager keybind is dropped. `markers` receives the frame's marker batch (cleared first). None when a panic poisoned
+    // the state lock
+    pub fn frame(
+        &self,
+        status: &FrameStatus,
+        inputs: &[InputItem],
+        lingering: u16,
+        markers: &mut Vec<MarkerEntry>,
+    ) -> Option<SessionFrame> {
         let mut status = *status;
         status.present_count = self.clock.frames();
         if !(status.aspect.is_finite() && status.aspect > 0.0)
@@ -81,32 +56,42 @@ impl FreecamSession {
         }
         let over_ui = self.clock.pointer_over_ui();
         self.with_state(|state| {
+            let mut keys: Option<KeyConfig> = None;
+            if let Some(config) = state.connect_if_ready() {
+                self.clock.set_measure(config.telemetry);
+                keys = Some(config.keys.sanitized());
+            }
             state.controller_mut().set_pointer_over_ui(over_ui);
-            state.apply_events();
+            if let Some(changed) = state.apply_events(lingering) {
+                keys = Some(changed);
+            }
+            state.apply_inputs(inputs);
             state.start_if_asked();
             if let Some(mut handoff) = self.try_handoff() {
                 handoff.apply_actions(state.controller_mut());
             }
             let mut status = status;
             state.complete_status(&mut status);
-            let output = state.controller_mut().frame(&status);
+            let output: FrameOutput = state.controller_mut().frame(&status);
             if let Some(mut handoff) = self.try_handoff() {
                 handoff.publish(state.controller_mut());
             }
             state.apply_output(&output);
             markers.clear();
             markers.extend_from_slice(state.publish_markers());
-            output
+            let point_count = state.controller_mut().path().keys().len();
+            SessionFrame { output, keys, holding: state.holding(), panel_open: state.panel_open(), point_count }
         })
     }
 
-    // a remove for every live marker, written into `markers` (cleared first). None when a panic poisoned the state
-    // lock
-    pub fn shutdown_markers(&self, markers: &mut Vec<MarkerEntry>) -> Option<()> {
-        self.with_state(|state| {
-            markers.clear();
-            markers.extend_from_slice(state.shutdown_markers());
-        })
+    // a camera instruction reached the client. None when a panic poisoned the state lock
+    pub fn server_instruction(&self, kind: ServerInstruction, from_other_mod: bool) -> Option<()> {
+        self.with_state(|state| state.server_instruction(kind, from_other_mod))
+    }
+
+    // the answer to the ray the last frame asked for: the hit point, or None for a miss
+    pub fn ray_result(&self, hit: Option<Vec3>) -> Option<()> {
+        self.with_state(|state| state.ray_result(hit))
     }
 
     // the number of markers a batch can hold, for the buffers of the caller
@@ -115,8 +100,13 @@ impl FreecamSession {
     }
 
     fn with_state<R>(&self, body: impl FnOnce(&mut HandleState) -> R) -> Option<R> {
-        let mut state = self.lock(&self.state, "freecam controller")?;
-        Some(body(&mut state))
+        match self.state.lock() {
+            Ok(mut state) => Some(body(&mut state)),
+            Err(_) => {
+                self.log_poison("freecam controller");
+                None
+            }
+        }
     }
 
     fn try_handoff(&self) -> Option<MutexGuard<'_, UiHandoff>> {
@@ -125,16 +115,6 @@ impl FreecamSession {
             Err(TryLockError::WouldBlock) => None,
             Err(TryLockError::Poisoned(_)) => {
                 self.log_poison("UI hand-off");
-                None
-            }
-        }
-    }
-
-    fn lock<'a, T>(&self, mutex: &'a Mutex<T>, name: &str) -> Option<MutexGuard<'a, T>> {
-        match mutex.lock() {
-            Ok(guard) => Some(guard),
-            Err(_) => {
-                self.log_poison(name);
                 None
             }
         }

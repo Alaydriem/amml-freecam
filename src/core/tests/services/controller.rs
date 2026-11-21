@@ -7,12 +7,11 @@ use freecam_core::config::{FreecamConfig, KeyConfig, LookAtConfig, MarkerConfig,
 use freecam_core::services::FreecamController;
 use freecam_core::structs::{
     CameraCommand, CameraPose, FrameOutput, FrameStatus, FreecamAction, FreecamState, MarkerKind, MarkerShape, PathKey,
-    RayRequest, ServerInstruction, StartLeases, UiAction, Vec3,
+    PointerButton, RayRequest, ServerInstruction, StartLeases, UiAction, Vec3,
 };
 
 use crate::support::frames::Frames;
 
-const RIGHT: u8 = 1;
 const FRAME_STEP: f64 = 0.05;
 const EXIT_WAIT: usize = 10;
 
@@ -121,11 +120,11 @@ impl Rig {
 
     // mouse movement while freecam holds Input
     fn look(&mut self, dx: f32, dy: f32) {
-        self.event(ModEvent::PointerDelta { dx, dy });
+        self.controller.on_look_counts(dx, dy);
     }
 
     fn wheel(&mut self, delta: f32) {
-        self.event(ModEvent::Wheel { delta });
+        self.controller.on_wheel(delta);
     }
 
     fn press_toggle(&mut self) {
@@ -217,7 +216,7 @@ impl Rig {
 
     // the right mouse button down or up
     fn right(&mut self, down: bool) {
-        self.event(ModEvent::PointerButton { button: RIGHT, down, x: 0.0, y: 0.0 });
+        self.controller.on_button(PointerButton::Right, down);
     }
 
     // a right press away from the UI and one frame, which starts a look drag in bar mode
@@ -2346,6 +2345,47 @@ fn input_revoked_exits() {
     rig.frame();
 
     assert!(matches!(rig.controller.state(), FreecamState::Exiting { .. }));
+}
+
+#[test]
+fn input_lease_suspended_exits() {
+    let mut rig = Rig::new();
+    rig.start();
+    rig.hold(FreecamAction::FlyForward, true);
+
+    rig.event(ModEvent::InputLeaseSuspended);
+    rig.frame();
+
+    assert!(matches!(rig.controller.state(), FreecamState::Exiting { .. }));
+}
+
+#[test]
+fn input_lease_lost_exits() {
+    let mut rig = Rig::new();
+    rig.start();
+
+    rig.event(ModEvent::InputLeaseLost);
+    rig.frame();
+
+    assert!(matches!(rig.controller.state(), FreecamState::Exiting { .. }));
+}
+
+#[test]
+fn on_bind_runs_an_action_as_a_manager_keybind_does() {
+    let mut rig = Rig::new();
+    rig.controller.on_bind(FreecamAction::Toggle, KeybindPhase::Pressed);
+    assert!(rig.controller.take_start_request());
+}
+
+#[test]
+fn a_left_button_starts_no_look_drag() {
+    let mut rig = Rig::new();
+    rig.start_with_cursor();
+
+    rig.controller.on_button(PointerButton::Left, true);
+    let out = rig.frame();
+
+    assert!(out.cursor_mode);
 }
 
 #[test]

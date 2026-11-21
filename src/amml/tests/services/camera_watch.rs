@@ -1,63 +1,50 @@
 use alaydriem_freecam::services::CameraWatch;
-use alaydriem_freecam::types::InstructionKind;
-
-use crate::support::LogCapture;
-
-const MESSAGE: &str = "the camera registry and the server camera instructions disagree";
+use amml_api::{CameraKind, InstructionKind};
 
 #[test]
-fn without_the_registry_the_server_instructions_decide() {
-    let watch = CameraWatch::new(None);
+fn a_vanilla_camera_is_a_player_camera() {
+    let mut watch = CameraWatch::new();
 
-    let before = watch.decide(None, 1, 0.0, false);
+    assert!(watch.player_camera_active(Some(CameraKind::FirstPerson)));
+    assert!(watch.player_camera_active(Some(CameraKind::ThirdPerson)));
+    assert!(watch.player_camera_active(Some(CameraKind::ThirdPersonFront)));
+    assert!(!watch.player_camera_active(Some(CameraKind::Other)));
+}
+
+#[test]
+fn without_a_read_the_server_instructions_decide() {
+    let mut watch = CameraWatch::new();
+    assert!(watch.player_camera_active(None));
+
     watch.on_server_instruction(InstructionKind::Set);
-    let during = watch.decide(None, 1, 0.1, false);
-    watch.on_server_instruction(InstructionKind::Other);
-    let after_fade = watch.decide(None, 1, 0.2, false);
+    assert!(!watch.player_camera_active(None));
+
     watch.on_server_instruction(InstructionKind::Clear);
-    let after_clear = watch.decide(None, 1, 0.3, false);
-
-    assert_eq!((before, during, after_fade, after_clear), (true, false, false, true));
+    assert!(watch.player_camera_active(None));
 }
 
 #[test]
-fn a_new_capture_generation_starts_with_the_player_camera() {
-    let watch = CameraWatch::new(None);
-    watch.decide(None, 1, 0.0, false);
+fn a_world_leave_forgets_the_server_camera() {
+    let mut watch = CameraWatch::new();
     watch.on_server_instruction(InstructionKind::Set);
 
-    assert!(!watch.decide(None, 1, 0.1, false));
-    assert!(watch.decide(None, 2, 0.2, false), "a new handler");
-    watch.on_server_instruction(InstructionKind::Set);
-    assert!(watch.decide(None, 0, 0.3, false), "no handler: no world");
+    watch.reset();
+
+    assert!(watch.player_camera_active(None));
 }
 
 #[test]
-fn the_registry_wins_and_a_long_disagreement_is_logged_once() {
-    LogCapture::install();
-    let watch = CameraWatch::new(None);
+fn a_kind_change_is_reported_once() {
+    let mut watch = CameraWatch::new();
 
-    let short = watch.decide(Some(false), 1, 0.0, false);
-    let still_short = watch.decide(Some(false), 1, 0.9, false);
-    let lines_short = LogCapture::count(MESSAGE);
-    let long = watch.decide(Some(false), 1, 1.5, false);
-    watch.decide(Some(false), 1, 3.0, false);
-    let agreed = watch.decide(Some(true), 1, 3.1, false);
+    watch.player_camera_active(Some(CameraKind::FirstPerson));
+    let first = watch.take_changed();
+    watch.player_camera_active(Some(CameraKind::FirstPerson));
+    let same = watch.take_changed();
+    watch.player_camera_active(Some(CameraKind::ThirdPerson));
+    let changed = watch.take_changed();
 
-    assert_eq!((short, still_short, long, agreed), (false, false, false, true));
-    assert_eq!(lines_short, 0);
-    assert_eq!(LogCapture::count(MESSAGE), 1);
-}
-
-#[test]
-fn freecam_holding_the_camera_is_not_a_disagreement() {
-    LogCapture::install();
-    let watch = CameraWatch::new(None);
-
-    let held = watch.decide(Some(false), 1, 0.0, true);
-    watch.decide(Some(false), 1, 2.0, true);
-    let released = watch.decide(Some(true), 1, 2.1, false);
-
-    assert_eq!((held, released), (false, true));
-    assert_eq!(LogCapture::count(MESSAGE), 0);
+    assert_eq!(first, Some("first_person"));
+    assert_eq!(same, None);
+    assert_eq!(changed, Some("third_person"));
 }
