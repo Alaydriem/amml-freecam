@@ -142,13 +142,15 @@ fn pitch_is_clamped() {
 }
 
 #[test]
-fn yaw_stays_continuous() {
+fn two_full_turns_end_on_the_start_view() {
     let mut motion = Fixture::direct();
+    let start = motion.pose();
     motion.add_look(4800.0, 0.0);
 
     let pose = motion.step(0.016, HeldKeys::default());
 
-    assert!((pose.yaw - 720.0).abs() < 1e-2);
+    assert!(start.forward().dot(pose.forward()) > 1.0 - 1e-6);
+    assert!(pose.yaw.abs() <= CameraMotion::YAW_BOUND_DEGREES);
 }
 
 #[test]
@@ -185,4 +187,19 @@ fn hold_zeroes_velocity() {
     motion.hold();
 
     assert_eq!(motion.velocity().z, 0.0);
+}
+
+#[test]
+fn one_mouse_count_turns_by_the_sensitivity_after_ten_thousand_turns() {
+    let mut motion = Fixture::direct();
+    let sensitivity = MotionConfig::default().sensitivity;
+    motion.add_look(10_000.0 * 360.0 / sensitivity, 0.0);
+    let before = motion.step(0.016, HeldKeys::default());
+
+    motion.add_look(1.0, 0.0);
+    let after = motion.step(0.016, HeldKeys::default());
+
+    let turn = before.forward().dot(after.forward()).clamp(-1.0, 1.0).acos().to_degrees();
+    assert!((turn - sensitivity).abs() < 1e-3, "turned {turn}");
+    assert!(after.yaw.abs() <= 720.0);
 }

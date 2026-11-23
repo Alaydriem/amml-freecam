@@ -23,7 +23,7 @@ pub struct BindMatcher {
 }
 
 impl BindMatcher {
-    pub const ACTIONS: usize = 12;
+    pub const ACTIONS: usize = FreecamAction::COUNT;
 
     pub fn new(keys: &KeyConfig) -> Self {
         Self {
@@ -189,6 +189,7 @@ impl BindMatcher {
             FreecamAction::FlyUp => &keys.fly_up,
             FreecamAction::FlyDown => &keys.fly_down,
             FreecamAction::FlyFast => &keys.fly_fast,
+            FreecamAction::Orbit => &keys.orbit,
         }
     }
 }

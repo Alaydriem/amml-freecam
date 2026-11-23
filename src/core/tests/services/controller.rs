@@ -253,6 +253,35 @@ impl Rig {
     fn gap(a: CameraPose, b: CameraPose) -> f32 {
         (a.position - b.position).length()
     }
+
+    // freecam on with the smooth camera off, walked 20 frames forward of the player's head
+    fn orbit_ready(&mut self) -> CameraPose {
+        self.start_sharp();
+        self.walk(20)
+    }
+
+    // presses the orbit key and runs one frame
+    fn orbit(&mut self) -> FrameOutput {
+        self.tap(FreecamAction::Orbit);
+        self.frame()
+    }
+
+    // horizontal distance from the player's head
+    fn orbit_radius(pose: CameraPose) -> f32 {
+        let offset = pose.position - Frames::start_pose().position;
+        (offset.x * offset.x + offset.z * offset.z).sqrt()
+    }
+
+    // frames until freecam is back in On, None when it is not within `limit` frames
+    fn frames_until_on(&mut self, limit: usize) -> Option<(usize, CameraPose)> {
+        for count in 1..=limit {
+            let out = self.frame();
+            if self.controller.state() == FreecamState::On {
+                return Some((count, Self::pose(&out)));
+            }
+        }
+        None
+    }
 }
 
 #[test]
@@ -1204,7 +1233,7 @@ fn snapshot_reports_cursor_mode() {
 fn legend_follows_the_key_config() {
     let rig = Rig::new();
 
-    assert_eq!(rig.controller.legend().rows.len(), 5);
+    assert_eq!(rig.controller.legend().rows.len(), 6);
 }
 
 #[test]
@@ -2495,4 +2524,217 @@ fn apply_config_sets_a_changed_start_speed_and_smooth_flag() {
     let wheeled = rig.controller.ui_snapshot().speed;
     rig.controller.apply_config(config);
     assert_eq!(rig.controller.ui_snapshot().speed, wheeled);
+}
+
+#[test]
+fn orbit_key_starts_orbit() {
+    let mut rig = Rig::new();
+    rig.orbit_ready();
+
+    rig.orbit();
+
+    assert_eq!(rig.controller.state(), FreecamState::Orbiting);
+}
+
+#[test]
+fn orbit_refused_close_to_the_player() {
+    let mut rig = Rig::new();
+    rig.start_sharp();
+
+    rig.orbit();
+
+    assert_eq!(rig.controller.state(), FreecamState::On);
+}
+
+#[test]
+fn orbit_keeps_radius_height_and_aim() {
+    let mut rig = Rig::new();
+    let start = rig.orbit_ready();
+    let radius = Rig::orbit_radius(start);
+    rig.orbit();
+
+    let poses: Vec<CameraPose> = rig.frames(60).iter().map(Rig::pose).collect();
+
+    for pose in &poses {
+        assert!((Rig::orbit_radius(*pose) - radius).abs() < 1e-2);
+        assert!((pose.position.y - start.position.y).abs() < 1e-3);
+    }
+    let last = poses[59];
+    let toward = (Frames::start_pose().position - last.position).normalized();
+    assert!(last.forward().dot(toward) > 0.999);
+}
+
+#[test]
+fn orbit_ignores_mouse_look() {
+    let mut plain = Rig::new();
+    let mut looked = Rig::new();
+    for rig in [&mut plain, &mut looked] {
+        rig.orbit_ready();
+        rig.orbit();
+        rig.frames(10);
+    }
+
+    looked.look(500.0, 0.0);
+    let a = Rig::pose(&plain.frame());
+    let b = Rig::pose(&looked.frame());
+
+    assert!(Rig::gap(a, b) < 1e-4);
+    assert!((a.yaw - b.yaw).abs() < 1e-4);
+    assert!((a.pitch - b.pitch).abs() < 1e-4);
+}
+
+#[test]
+fn orbit_key_again_eases_out_to_on() {
+    let mut rig = Rig::new();
+    rig.orbit_ready();
+    rig.orbit();
+    let last = Rig::pose(&rig.frames(40)[39]);
+    assert!(Rig::gap(last, Rig::pose(&rig.frame())) > 0.0);
+
+    rig.tap(FreecamAction::Orbit);
+    let (count, finished) = rig.frames_until_on(25).unwrap();
+
+    assert!((19..=21).contains(&count));
+    let next = Rig::pose(&rig.frame());
+    assert!(Rig::gap(finished, next) < 1e-4);
+    assert!((finished.yaw - next.yaw).abs() < 1e-4);
+}
+
+#[test]
+fn flight_key_stops_orbit() {
+    let mut rig = Rig::new();
+    rig.orbit_ready();
+    rig.orbit();
+    rig.frames(20);
+
+    rig.hold(FreecamAction::FlyForward, true);
+
+    assert!(rig.frames_until_on(22).is_some());
+    rig.hold(FreecamAction::FlyForward, false);
+}
+
+#[test]
+fn bar_key_stops_orbit_without_cursor() {
+    let mut rig = Rig::new();
+    rig.orbit_ready();
+    rig.orbit();
+    rig.frames(20);
+
+    rig.cursor();
+
+    assert!(!rig.controller.ui_snapshot().cursor_mode);
+    assert!(rig.frames_until_on(22).is_some());
+    assert!(!rig.controller.ui_snapshot().cursor_mode);
+}
+
+#[test]
+fn toggle_during_orbit_begins_exit() {
+    let mut rig = Rig::new();
+    rig.orbit_ready();
+    rig.orbit();
+
+    rig.begin_exit();
+
+    assert!(matches!(rig.controller.state(), FreecamState::Exiting { .. }));
+}
+
+#[test]
+fn damage_during_orbit_begins_exit() {
+    let mut rig = Rig::new();
+    rig.orbit_ready();
+    rig.orbit();
+
+    rig.frame_with(|status| status.health = 19);
+
+    assert!(matches!(rig.controller.state(), FreecamState::Exiting { .. }));
+}
+
+#[test]
+fn orbit_pauses_while_a_menu_is_open() {
+    let mut rig = Rig::new();
+    rig.orbit_ready();
+    rig.orbit();
+    rig.frames(20);
+
+    let held: Vec<CameraPose> = (0..5).map(|_| Rig::pose(&rig.frame_with(|status| status.menu_open = true))).collect();
+
+    for pose in &held {
+        assert!(Rig::gap(held[0], *pose) < 1e-6);
+        assert!((held[0].yaw - pose.yaw).abs() < 1e-6);
+    }
+    assert_eq!(rig.controller.state(), FreecamState::Orbiting);
+}
+
+#[test]
+fn orbit_holds_until_markers_leave() {
+    let mut rig = Rig::new();
+    let (_, last) = rig.build_path(10);
+    rig.frame();
+    assert!(!rig.world.is_empty());
+    rig.tap(FreecamAction::Orbit);
+
+    let mut held_frames = 0;
+    for _ in 0..30 {
+        let had_markers = !rig.world.is_empty();
+        let pose = Rig::pose(&rig.frame());
+        if had_markers {
+            assert!(Rig::gap(last, pose) < 1e-4);
+            held_frames += 1;
+        }
+    }
+
+    assert!(held_frames > 0);
+    assert!(rig.world.is_empty());
+    assert!(Rig::gap(last, Rig::pose(&rig.frame())) > 0.0);
+}
+
+#[test]
+fn orbit_leaves_the_path_unchanged() {
+    let mut rig = Rig::new();
+    rig.build_path(10);
+    let keys = rig.controller.path().keys().to_vec();
+    rig.orbit();
+    rig.frames(40);
+
+    rig.tap(FreecamAction::Orbit);
+    assert!(rig.frames_until_on(25).is_some());
+
+    assert_eq!(rig.controller.path().keys(), keys.as_slice());
+}
+
+#[test]
+fn mouse_look_after_hours_of_orbit_turns_by_the_sensitivity() {
+    let mut rig = Rig::new();
+    rig.orbit_ready();
+    rig.orbit();
+    rig.frames(30);
+    rig.time += 10.0 * 3600.0;
+    rig.frames(30);
+    rig.tap(FreecamAction::Orbit);
+    rig.frames_until_on(25).unwrap();
+    let before = Rig::pose(&rig.frame());
+
+    rig.look(1.0, 0.0);
+    let after = Rig::pose(&rig.frame());
+
+    let turn = before.forward().dot(after.forward()).clamp(-1.0, 1.0).acos().to_degrees();
+    assert!((turn - MotionConfig::default().sensitivity).abs() < 1e-3, "turned {turn}");
+    assert!(after.yaw.abs() <= 720.0);
+}
+
+#[test]
+fn wheel_changes_orbit_speed_smoothly() {
+    let mut rig = Rig::new();
+    rig.orbit_ready();
+    rig.orbit();
+    let poses: Vec<CameraPose> = rig.frames(40).iter().map(Rig::pose).collect();
+    let steady = Rig::gap(poses[38], poses[39]);
+
+    rig.wheel(1.0);
+    let first = Rig::pose(&rig.frame());
+    let later: Vec<CameraPose> = rig.frames(60).iter().map(Rig::pose).collect();
+
+    assert!(Rig::gap(poses[39], first) < steady * 1.1);
+    let settled = Rig::gap(later[58], later[59]);
+    assert!(settled > steady * 1.2, "settled {settled}, steady {steady}");
 }

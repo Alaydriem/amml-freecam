@@ -125,6 +125,14 @@ keybind "fly_fast" {
   config_path = "keys.fly_fast"
 }
 
+keybind "orbit" {
+  label       = "Orbit the player"
+  default     = "Ctrl+O"
+  capability  = "Camera"
+  scope       = "WhileHeld"
+  config_path = "keys.orbit"
+}
+
 section "keys" {
   title = "Keys"
 
@@ -209,6 +217,13 @@ section "keys" {
     label   = "Fly fast"
     kind    = "chord"
     default = "Ctrl"
+    apply   = "Live"
+  }
+
+  field "keys.orbit" {
+    label   = "Orbit the player"
+    kind    = "chord"
+    default = "Ctrl+O"
     apply   = "Live"
   }
 }
