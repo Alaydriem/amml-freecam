@@ -37,7 +37,7 @@ impl Default for KeyConfig {
             fly_up: "Space".to_owned(),
             fly_down: "Shift".to_owned(),
             fly_fast: "Ctrl".to_owned(),
-            orbit: "Ctrl+O".to_owned(),
+            orbit: "F3+O".to_owned(),
         }
     }
 }

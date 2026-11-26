@@ -19,7 +19,7 @@ fn legend_has_r3_rows() {
             ("F3+E", "show bar"),
             ("Ctrl+B", "add point"),
             ("F3+Delete", "delete point"),
-            ("Ctrl+O", "orbit"),
+            ("F3+O", "orbit"),
             ("F3+P", "exit freecam")
         ]
     );
@@ -36,7 +36,7 @@ fn bar_mode_adds_the_drag_row_and_relabels_the_bar_row() {
             ("RMB drag", "look"),
             ("Ctrl+B", "add point"),
             ("F3+Delete", "delete point"),
-            ("Ctrl+O", "orbit"),
+            ("F3+O", "orbit"),
             ("F3+P", "exit freecam")
         ]
     );

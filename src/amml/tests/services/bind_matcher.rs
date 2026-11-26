@@ -124,16 +124,14 @@ fn ctrl_b_adds_a_point_and_holds_fly_fast() {
 }
 
 #[test]
-fn ctrl_o_orbits_and_holds_fly_fast() {
+fn f3_o_orbits_and_plain_o_does_not() {
     let mut rig = Rig::flying();
 
-    rig.key(KeyCode::LCONTROL, true, Modifiers::CTRL);
-    rig.key(KeyCode::O, true, Modifiers::CTRL);
+    rig.key(KeyCode::O, true, Modifiers::NONE);
+    rig.key(KeyCode::O, false, Modifiers::NONE);
+    rig.key(KeyCode::O, true, Modifiers::F3);
 
-    assert_eq!(
-        rig.binds(),
-        vec![(FreecamAction::FlyFast, KeybindPhase::Pressed), (FreecamAction::Orbit, KeybindPhase::Pressed)]
-    );
+    assert_eq!(rig.binds(), vec![(FreecamAction::Orbit, KeybindPhase::Pressed)]);
 }
 
 #[test]

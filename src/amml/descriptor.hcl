@@ -127,7 +127,7 @@ keybind "fly_fast" {
 
 keybind "orbit" {
   label       = "Orbit the player"
-  default     = "Ctrl+O"
+  default     = "F3+O"
   capability  = "Camera"
   scope       = "WhileHeld"
   config_path = "keys.orbit"
@@ -223,7 +223,7 @@ section "keys" {
   field "keys.orbit" {
     label   = "Orbit the player"
     kind    = "chord"
-    default = "Ctrl+O"
+    default = "F3+O"
     apply   = "Live"
   }
 }

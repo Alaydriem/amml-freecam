@@ -110,7 +110,7 @@ impl FreecamRuntime {
         self.input.on_key(event, ctx.input().modifiers(), &ctx.log());
     }
 
-    pub fn mouse(&self, event: &MouseInput) {
+    pub fn mouse(&self, event: &mut MouseInput) {
         self.input.on_mouse(event);
     }
 

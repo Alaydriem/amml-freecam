@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use amml_api::amml_abi::{KeyInput, MouseInput};
-use amml_api::{Event, KeyInputExt, Logger, Modifiers, MouseAction, MouseButton, MouseInputExt};
+use amml_api::{Cancel, Event, KeyInputExt, Logger, Modifiers, MouseAction, MouseButton, MouseInputExt};
 use freecam_core::config::KeyConfig;
 use freecam_core::structs::{FreecamAction, PointerButton};
 
@@ -60,14 +60,18 @@ impl InputBridge {
     }
 
     // a `MouseInput` listener call: raw counts, notches and buttons, only while freecam holds its Input lease and the
-    // manager panel is closed (the panel takes the mouse then)
-    pub fn on_mouse(&self, event: &MouseInput) {
+    // manager panel is closed (the panel takes the mouse then). The lease blocks no wheel, so the notch is cancelled
+    // here: the game does not scroll the hotbar under freecam
+    pub fn on_mouse(&self, event: &mut MouseInput) {
         if event.is_injected() || !self.mouse_open.load(Ordering::Relaxed) {
             return;
         }
         let item = match event.action() {
             MouseAction::Move => InputItem::Look { dx: event.dx as f32, dy: event.dy as f32 },
-            MouseAction::Wheel { notches } => InputItem::Wheel(notches),
+            MouseAction::Wheel { notches } => {
+                event.cancel();
+                InputItem::Wheel(notches)
+            }
             MouseAction::Button { button, down } => InputItem::Button(Self::button(button), down),
             _ => return,
         };

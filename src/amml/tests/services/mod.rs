@@ -2,6 +2,7 @@ mod bind_matcher;
 mod camera_watch;
 mod descriptor;
 mod freecam_frame_handler;
+mod input_bridge;
 mod input_queue;
 mod look_ray;
 mod marker_delivery;
