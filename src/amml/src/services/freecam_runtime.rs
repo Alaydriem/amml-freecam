@@ -2,18 +2,17 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
 use amml_api::amml_abi::{AmmlOrigin, CameraSetup, KeyInput, MouseInput};
-use amml_api::{CameraSetupExt, Ctx, EventCtx, InstructionKind, Logger};
+use amml_api::{CameraSetupExt, Ctx, EventCtx, InstructionKind};
 
 use crate::services::{FrameDriver, FrameStatusReader, InputBridge};
 
 // what the listeners share for the life of the DLL: the frame driver of the current enable (None while disabled),
-// the input path, the projection of the last camera setup and the window focus. The frame listeners run on the game
+// the input path, the projection of the last camera setup and a focus loss. The frame listeners run on the game
 // thread; the key, mouse and focus listeners may run on other threads and touch only the input path and the focus
 pub struct FreecamRuntime {
     driver: Mutex<Option<FrameDriver>>,
     input: InputBridge,
     reader: FrameStatusReader,
-    focused: AtomicBool,
     // a focus loss since the last frame; the next frame clears the held flight keys
     focus_lost: AtomicBool,
     // camera instructions since the last frame; the loader raises the echo of a free camera call from inside that
@@ -34,7 +33,6 @@ impl FreecamRuntime {
             driver: Mutex::new(None),
             input: InputBridge::new(),
             reader: FrameStatusReader::new(),
-            focused: AtomicBool::new(true),
             focus_lost: AtomicBool::new(false),
             instructions: Mutex::new(Vec::with_capacity(Self::INSTRUCTION_CAPACITY)),
             instructions_dropped: AtomicU32::new(0),
@@ -48,17 +46,16 @@ impl FreecamRuntime {
 
     // enable: the frames run with this driver until `stop`
     pub fn start(&self, driver: FrameDriver) {
-        self.focused.store(true, Ordering::Relaxed);
         self.focus_lost.store(false, Ordering::Relaxed);
         *self.lock() = Some(driver);
     }
 
     // disable, after the listeners are gone: the driver goes, which closes the manager link. The loader releases the
     // free camera and removes the shapes itself
-    pub fn stop(&self, log: &Logger) {
+    pub fn stop(&self) {
         let driver = self.lock().take();
         drop(driver);
-        self.input.set_gate(false, false, log);
+        self.input.set_gate(false, false);
     }
 
     // `ClientTick`: the frame outside a world
@@ -107,7 +104,7 @@ impl FreecamRuntime {
     }
 
     pub fn key(&self, event: &KeyInput, ctx: &Ctx) {
-        self.input.on_key(event, ctx.input().modifiers(), &ctx.log());
+        self.input.on_key(event, ctx.input().modifiers());
     }
 
     pub fn mouse(&self, event: &mut MouseInput) {
@@ -115,16 +112,10 @@ impl FreecamRuntime {
     }
 
     // a window focus message. Every loss that is not a replay asks the next frame to clear the held flight keys, also
-    // when the focus was lost already; a gain only changes the tracked state. A change of the state is logged
-    pub fn focus(&self, gained: bool, replayed: bool, log: &Logger) {
-        if replayed {
-            return;
-        }
-        if !gained {
+    // when the focus was lost already
+    pub fn focus(&self, gained: bool, replayed: bool) {
+        if !gained && !replayed {
             self.focus_lost.store(true, Ordering::Relaxed);
-        }
-        if self.focused.swap(gained, Ordering::Relaxed) != gained {
-            log.debug("window focus", &[("focused", &gained.to_string())]);
         }
     }
 

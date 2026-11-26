@@ -34,9 +34,8 @@ impl FreecamListeners {
         listeners.push(events.listen::<KeyInput>(HookOrder::NORMAL, move |event, _| runtime.key(event, &keys))?);
         listeners.push(events.listen::<MouseInput>(HookOrder::NORMAL, move |event, _| runtime.mouse(event))?);
         listeners.push(events.listen::<WorldLeft>(HookOrder::NORMAL, move |_, _| runtime.world_left())?);
-        let log = ctx.log();
         listeners.push(events.listen::<WindowFocus>(HookOrder::NORMAL, move |event, _| {
-            runtime.focus(event.gained(), event.replayed(), &log);
+            runtime.focus(event.gained(), event.replayed());
         })?);
         Ok(Self { listeners })
     }

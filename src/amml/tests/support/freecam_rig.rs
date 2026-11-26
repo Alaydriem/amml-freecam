@@ -22,8 +22,6 @@ impl FreecamRig {
     pub const KEY_W: u16 = 0x57;
     pub const KEY_B: u16 = 0x42;
     pub const KEY_CTRL: u16 = 0xA2;
-    // enough world frames for the first heartbeat line of a flight
-    pub const HEARTBEAT_FRAMES: usize = 120;
 
     pub fn new() -> Self {
         Self::build(true)

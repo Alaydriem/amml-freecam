@@ -1,8 +1,8 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use amml_api::amml_abi::{KeyInput, MouseInput};
-use amml_api::{Cancel, Event, KeyInputExt, Logger, Modifiers, MouseAction, MouseButton, MouseInputExt};
+use amml_api::{Cancel, Event, KeyInputExt, Modifiers, MouseAction, MouseButton, MouseInputExt};
 use freecam_core::config::KeyConfig;
 use freecam_core::structs::{FreecamAction, PointerButton};
 
@@ -15,13 +15,8 @@ use crate::types::InputItem;
 pub struct InputBridge {
     matcher: Mutex<BindMatcher>,
     queue: InputQueue,
-    active: AtomicBool,
     // the lease is held and the panel closed: the mouse drives the camera
     mouse_open: AtomicBool,
-    // the real keys logged since the gate last opened, so a run shows whether keys reach freecam under its lease
-    keys_logged: AtomicU32,
-    // the last gate inputs (holding, panel open), logged when they change
-    gate: Mutex<Option<(bool, bool)>>,
 }
 
 impl InputBridge {
@@ -29,32 +24,15 @@ impl InputBridge {
         Self {
             matcher: Mutex::new(BindMatcher::new(&KeyConfig::default())),
             queue: InputQueue::new(InputQueue::CAPACITY),
-            active: AtomicBool::new(false),
             mouse_open: AtomicBool::new(false),
-            keys_logged: AtomicU32::new(0),
-            gate: Mutex::new(None),
         }
     }
 
-    // the real keys logged per opening of the gate
-    pub const KEYS_LOGGED: u32 = 4;
-
     // a `KeyInput` listener call; `modifiers` from `Input::modifiers` (the event carries no F3). Injected keys are
     // not the user's and match nothing
-    pub fn on_key(&self, event: &KeyInput, modifiers: Modifiers, log: &Logger) {
+    pub fn on_key(&self, event: &KeyInput, modifiers: Modifiers) {
         if event.is_injected() {
             return;
-        }
-        if self.active.load(Ordering::Relaxed) && self.keys_logged.fetch_add(1, Ordering::Relaxed) < Self::KEYS_LOGGED {
-            log.debug(
-                "flight key seen",
-                &[
-                    ("key", &format!("{:#04x}", event.key)),
-                    ("down", &event.down.to_string()),
-                    ("repeat", &event.repeat.to_string()),
-                    ("cancelled", &u8::from(event.is_cancelled()).to_string()),
-                ],
-            );
         }
         self.matcher().on_key(event.key_code(), event.down != 0, event.repeat != 0, modifiers, &self.queue);
     }
@@ -81,26 +59,8 @@ impl InputBridge {
     // once per frame: the binds count while freecam holds its Input lease and the panel is closed; a closed gate
     // releases the held binds. The window focus is no condition: real keys reach the game only while its window has
     // the keyboard focus
-    pub fn set_gate(&self, holding: bool, panel_open: bool, log: &Logger) {
-        let open = holding && !panel_open;
-        let mut gate = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
-        if *gate != Some((holding, panel_open)) {
-            *gate = Some((holding, panel_open));
-            if open {
-                self.keys_logged.store(0, Ordering::Relaxed);
-            }
-            log.debug(
-                "bind gate",
-                &[
-                    ("open", &open.to_string()),
-                    ("holding", &holding.to_string()),
-                    ("panel_open", &panel_open.to_string()),
-                ],
-            );
-        }
-        drop(gate);
-        self.active.store(holding, Ordering::Relaxed);
-        self.mouse_open.store(open, Ordering::Relaxed);
+    pub fn set_gate(&self, holding: bool, panel_open: bool) {
+        self.mouse_open.store(holding && !panel_open, Ordering::Relaxed);
         self.matcher().set_gate(holding, panel_open, &self.queue);
     }
 

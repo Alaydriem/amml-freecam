@@ -75,7 +75,7 @@ impl AmmlMod for FreecamMod {
                 Ok(())
             }
             Err(error) => {
-                runtime.stop(&log);
+                runtime.stop();
                 log.error("freecam off", &[("error", &error.to_string())]);
                 Err(error)
             }
@@ -83,11 +83,11 @@ impl AmmlMod for FreecamMod {
     }
 
     // the listeners go first, outside the lock, so no frame runs while the driver and the link close
-    fn disable(ctx: &Ctx, _how: &DisableCtx) {
+    fn disable(_ctx: &Ctx, _how: &DisableCtx) {
         let listeners = LISTENERS.lock().unwrap_or_else(PoisonError::into_inner).take();
         if let Some(listeners) = listeners {
             listeners.stop();
         }
-        FreecamRuntime::get().stop(&ctx.log());
+        FreecamRuntime::get().stop();
     }
 }

@@ -21,9 +21,9 @@ impl Fixture {
         }
     }
 
-    fn bridge(game: &FakeGame, holding: bool, panel_open: bool) -> InputBridge {
+    fn bridge(holding: bool, panel_open: bool) -> InputBridge {
         let bridge = InputBridge::new();
-        bridge.set_gate(holding, panel_open, &game.ctx().log());
+        bridge.set_gate(holding, panel_open);
         bridge
     }
 
@@ -36,8 +36,7 @@ impl Fixture {
 
 #[test]
 fn wheel_goes_to_freecam_and_not_to_the_game_while_the_gate_is_open() {
-    let game = FakeGame::new();
-    let bridge = Fixture::bridge(&game, true, false);
+    let bridge = Fixture::bridge(true, false);
     let mut event = Fixture::mouse(AmmlMouseAction::WHEEL, 1.0);
 
     bridge.on_mouse(&mut event);
@@ -48,8 +47,7 @@ fn wheel_goes_to_freecam_and_not_to_the_game_while_the_gate_is_open() {
 
 #[test]
 fn wheel_reaches_the_game_while_freecam_holds_no_lease() {
-    let game = FakeGame::new();
-    let bridge = Fixture::bridge(&game, false, false);
+    let bridge = Fixture::bridge(false, false);
     let mut event = Fixture::mouse(AmmlMouseAction::WHEEL, -1.0);
 
     bridge.on_mouse(&mut event);
@@ -60,8 +58,7 @@ fn wheel_reaches_the_game_while_freecam_holds_no_lease() {
 
 #[test]
 fn wheel_is_left_to_the_manager_while_its_panel_is_open() {
-    let game = FakeGame::new();
-    let bridge = Fixture::bridge(&game, true, true);
+    let bridge = Fixture::bridge(true, true);
     let mut event = Fixture::mouse(AmmlMouseAction::WHEEL, 1.0);
 
     bridge.on_mouse(&mut event);
@@ -72,8 +69,7 @@ fn wheel_is_left_to_the_manager_while_its_panel_is_open() {
 
 #[test]
 fn a_mouse_move_is_not_cancelled_while_the_gate_is_open() {
-    let game = FakeGame::new();
-    let bridge = Fixture::bridge(&game, true, false);
+    let bridge = Fixture::bridge(true, false);
     let mut event = Fixture::mouse(AmmlMouseAction::MOVE, 0.0);
 
     bridge.on_mouse(&mut event);

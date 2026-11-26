@@ -27,14 +27,9 @@ pub struct FrameDriver {
     pose: Option<CameraPose>,
     camera_owned: bool,
     off_thread_logged: bool,
-    // world frames of the running flight, for the heartbeat lines
-    flight_frames: u64,
 }
 
 impl FrameDriver {
-    // the world frame counts of a flight that give a heartbeat line, so a run shows the frames still run
-    pub const HEARTBEATS: [u64; 2] = [120, 1200];
-
     pub fn new(ctx: Ctx, session: FreecamSession) -> Self {
         let capacity = session.marker_capacity();
         Self {
@@ -50,7 +45,6 @@ impl FrameDriver {
             pose: None,
             camera_owned: false,
             off_thread_logged: false,
-            flight_frames: 0,
         }
     }
 
@@ -85,7 +79,6 @@ impl FrameDriver {
             self.log.info("camera watch", &[("kind", name)]);
         }
         let free_available = control.free_available() == Some(true);
-        self.heartbeat();
         let rendered = camera.as_ref().and_then(|camera| camera.rendered_position());
         let focused = Self::take_focus(focus_lost);
         let mut status = reader.read(&client, focused, free_available, player_camera, rendered);
@@ -164,7 +157,7 @@ impl FrameDriver {
         if let Some(keys) = &frame.keys {
             input.set_keys(keys);
         }
-        input.set_gate(frame.holding, frame.panel_open, &self.log);
+        input.set_gate(frame.holding, frame.panel_open);
         if status.in_world
             && let Some((delivered, dimension)) = self.delivery.deliver(&shapes, &self.markers)
             && delivered > 0
@@ -190,18 +183,6 @@ impl FrameDriver {
         let hit = source.and_then(|source| LookRay::cast(&source, ray.origin, ray.direction, ray.max_distance));
         self.log.info("look-at ray answered", &[("hit", if hit.is_some() { "block_or_actor" } else { "none" })]);
         let _ = self.session.ray_result(hit);
-    }
-
-    // counts the world frames of a flight (the flag is the one of the last frame)
-    fn heartbeat(&mut self) {
-        if !self.camera_owned {
-            self.flight_frames = 0;
-            return;
-        }
-        self.flight_frames += 1;
-        if Self::HEARTBEATS.contains(&self.flight_frames) {
-            self.log.debug("world frames running", &[("count", &self.flight_frames.to_string())]);
-        }
     }
 
     // false once after a focus loss: only a frame that runs core takes the loss, so a client tick in a world (which

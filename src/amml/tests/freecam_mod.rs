@@ -306,59 +306,6 @@ fn a_world_leave_ends_the_flight_without_a_release() {
 }
 
 #[test]
-fn a_focus_change_is_logged_once_per_change() {
-    let rig = FreecamRig::new();
-    rig.frame();
-
-    rig.focus(false);
-    rig.focus(false);
-    rig.focus(true);
-
-    assert_eq!(rig.lines("debug window focus focused=false").len(), 1, "{:?}", rig.game.logs());
-    assert_eq!(rig.lines("debug window focus focused=true").len(), 1);
-}
-
-#[test]
-fn the_bind_gate_logs_each_change_of_its_inputs() {
-    let rig = FreecamRig::new();
-    rig.frame();
-
-    rig.toggle_on();
-    rig.focus(false);
-    rig.frames(2);
-    rig.toggle_off();
-
-    assert_eq!(rig.lines("debug bind gate open=true holding=true panel_open=false").len(), 1, "{:?}", rig.game.logs());
-    // the first frame before the flight and the end of the flight
-    assert_eq!(rig.lines("debug bind gate open=false holding=false panel_open=false").len(), 2);
-}
-
-#[test]
-fn the_first_keys_under_the_lease_are_logged() {
-    let rig = FreecamRig::new();
-    rig.frame();
-    rig.toggle_on();
-
-    rig.game.real_key(FreecamRig::KEY_W, true);
-    rig.game.real_key(FreecamRig::KEY_W, false);
-
-    let seen = rig.lines("debug flight key seen");
-    assert_eq!(seen.len(), 2, "{:?}", rig.game.logs());
-    assert!(seen[0].starts_with("debug flight key seen key=0x57 down=1 repeat=0 cancelled="), "{seen:?}");
-}
-
-#[test]
-fn a_flight_logs_that_its_world_frames_run() {
-    let rig = FreecamRig::new();
-    rig.frame();
-    rig.toggle_on();
-
-    rig.frames(FreecamRig::HEARTBEAT_FRAMES);
-
-    assert_eq!(rig.lines("debug world frames running count=").len(), 1, "{:?}", rig.game.logs());
-}
-
-#[test]
 fn a_focus_loss_between_frames_clears_the_keys_when_a_client_tick_comes_first() {
     let rig = FreecamRig::new();
     rig.frame();
