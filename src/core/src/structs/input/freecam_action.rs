@@ -14,10 +14,14 @@ pub enum FreecamAction {
     FlyUp,
     FlyDown,
     FlyFast,
+    Orbit,
 }
 
 impl FreecamAction {
-    const ALL: [FreecamAction; 12] = [
+    // the number of actions, which is the descriptor's keybind count
+    pub const COUNT: usize = Self::ALL.len();
+
+    const ALL: [FreecamAction; 13] = [
         Self::Toggle,
         Self::ToggleSmooth,
         Self::AddPoint,
@@ -30,6 +34,7 @@ impl FreecamAction {
         Self::FlyUp,
         Self::FlyDown,
         Self::FlyFast,
+        Self::Orbit,
     ];
 
     // the action of the manager's keybind index, None past the last one
@@ -57,6 +62,7 @@ impl FreecamAction {
             Self::FlyUp => "fly_up",
             Self::FlyDown => "fly_down",
             Self::FlyFast => "fly_fast",
+            Self::Orbit => "orbit",
         }
     }
 }

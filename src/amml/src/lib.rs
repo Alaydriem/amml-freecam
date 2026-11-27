@@ -1,15 +1,12 @@
-//! @alaydriem/freecam as an AMML mod: drives freecam-core from the client update and the render camera, moves the
-//! game camera through the client's own camera instructions, and draws the path markers as primitive shapes.
+//! @alaydriem/freecam as an AMML mod: drives freecam-core from the loader's client tick and camera setup events, moves
+//! the game camera through the loader's free camera, and draws the path markers as world shapes.
 
 #![deny(unsafe_code)]
 
-pub mod api;
-pub mod detours;
 pub mod freecam_mod;
-pub mod game;
 pub mod services;
 pub mod types;
 
 pub use freecam_mod::FreecamMod;
 
-amml_sdk::amml_mod!(FreecamMod);
+amml_api::amml_mod!(FreecamMod);

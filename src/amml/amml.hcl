@@ -1,64 +1,132 @@
 namespace   = "alaydriem"
 name        = "freecam"
 entry       = "alaydriem_freecam.dll"
-api_version = 2
-amml_version = "26.60.6"
-entries = [
-  # required: freecam refuses to enable without them
-  "ClientInstance.update",
-  "ClientInstance.getLocalPlayer",
-  "ClientInstance.isWorldActive",
-  "ClientInstance.isShowingMenu",
-  "Actor.stateVectorComponent",
-  "Actor.actorRotationComponent",
-  "StateVectorComponent.mPos",
-  "ActorRotationComponent.mRot",
-  "Actor.mLevel",
-  "Actor.getDimension",
-  "Dimension.getDimensionId",
-  "Actor.getDimensionBlockSource",
-  "LevelRendererPlayer.setupCamera",
-  "LevelRendererPlayer.createViewRenderObject",
-  # the camera write (game.camera_write; Camera.mForward anchors the Camera mirror and the projection read)
-  "Camera.mForward",
-  "Camera.updateViewMatrixDependencies",
-  "LevelRendererCamera.preRenderUpdate",
-  "LevelRendererCamera.mCameraPos",
-  "LevelRendererCamera.mCameraTargetPos",
-  "ViewRenderObject.mViewData",
-  "ViewRenderData.mCameraPos",
-  # head position and health (game.actor_extra)
-  "Actor.getAttachPos",
-  "Actor.mEntityContext",
-  "ActorAttribute.getHealth",
-  # delivery: the packet handler capture and the camera instruction
-  "ClientNetworkHandler.vtable",
-  "ClientNetworkHandler.handle.NetworkChunkPublisherUpdatePacket",
-  "ClientNetworkHandler.handle.CameraPresetsPacket",
-  "ClientNetworkHandler.handle.CameraInstructionPacket",
-  "MinecraftPackets.createPacket",
-  "CameraInstructionPacket.mCameraInstruction",
-  "CameraInstructionPacket.size",
-  "CameraInstruction.mSpline",
-  "Level.getCameraPresets",
-  "CameraPreset.size",
-  # optional, markers: path markers as primitive shapes
-  "ClientNetworkHandler.handle.PrimitiveShapesPacket",
-  "PrimitiveShapesPacket.mShapes",
-  "PrimitiveShapeDataPayload.size",
-  # optional, camera watch: which camera the game shows
-  "ClientInstance.getCameraRegistry",
-  "CameraRegistry.mCameraEntities",
-  "CameraRegistry.cameraEntityStride",
-  "CameraComponent.typeId",
-  "CameraComponent.sizeFactor",
-  "CameraComponent.sizeShift",
-  "ActiveCameraComponent.typeId",
-  # optional, look-at: the block and actor ray
-  "BlockSource.clip",
-  "BlockSource.fetchEntities",
-  "Actor.aabbShapeComponent",
-]
+api_version = 3
+
+uses {
+  feature "flight" {
+    event "client.tick" {
+      version  = 1
+      required = true
+    }
+    event "camera.setup" {
+      version  = 1
+      required = true
+    }
+    event "camera.instruction_received" {
+      version  = 1
+      required = true
+    }
+    event "input.key" {
+      version  = 1
+      required = true
+    }
+    event "input.mouse" {
+      version  = 1
+      required = true
+    }
+    event "world.left" {
+      version  = 1
+      required = true
+    }
+    event "window.focus" {
+      version  = 1
+      required = true
+    }
+    event "registry.provider_ready" {
+      version  = 1
+      required = true
+    }
+    event "registry.provider_gone" {
+      version  = 1
+      required = true
+    }
+    event "mods.loaded" {
+      version  = 1
+      required = true
+    }
+    event "input.lease_suspended" {
+      version  = 1
+      required = true
+    }
+    event "input.lease_resumed" {
+      version  = 1
+      required = true
+    }
+    event "input.lease_lost" {
+      version  = 1
+      required = true
+    }
+    event "input.injected_released" {
+      version  = 2
+      required = true
+    }
+    area "client.read" {
+      version  = 1
+      required = true
+    }
+    area "input.lease" {
+      version  = 1
+      required = true
+    }
+    area "actor.read" {
+      version  = 3
+      required = true
+    }
+    area "actor.health" {
+      version  = 1
+      required = true
+    }
+    area "camera.pose" {
+      version  = 1
+      required = true
+    }
+    area "camera.projection" {
+      version  = 1
+      required = true
+    }
+    area "camera.free" {
+      version  = 1
+      required = true
+    }
+  }
+  feature "markers" {
+    area "world.shapes" {
+      version  = 1
+      required = true
+    }
+  }
+  feature "camera_watch" {
+    area "camera.active" {
+      version  = 1
+      required = true
+    }
+  }
+  feature "look_at" {
+    area "world.raycast" {
+      version  = 1
+      required = true
+    }
+    area "world.actors_in" {
+      version  = 1
+      required = true
+    }
+  }
+  feature "screenshots" {
+    event "overlay.screenshot_taken" {
+      version  = 1
+      required = true
+    }
+    event "overlay.screenshot_written" {
+      version  = 1
+      required = true
+    }
+    area "overlay.screenshot" {
+      version  = 1
+      required = true
+    }
+  }
+}
 
 listing {
   title       = "Freecam"

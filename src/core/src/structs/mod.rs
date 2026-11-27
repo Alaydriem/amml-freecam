@@ -12,7 +12,7 @@ pub mod ui;
 pub use camera::CameraPose;
 pub use collections::BoundedQueue;
 pub use frame::{CameraCommand, CaptureRequest, FrameOutput, FrameStatus, RayRequest, ScreenshotStep};
-pub use input::{FreecamAction, HeldKeys};
+pub use input::{FreecamAction, HeldKeys, PointerButton};
 pub use markers::{MarkerEntry, MarkerKind, MarkerShape};
 pub use math::Vec3;
 pub use path::{KeyEdit, PathKey};

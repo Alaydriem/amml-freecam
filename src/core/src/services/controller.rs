@@ -6,13 +6,13 @@ use amm_core::structs::event::{KeybindPhase, ModEvent};
 use crate::config::FreecamConfig;
 use crate::services::path_store::PATH_CAPACITY;
 use crate::services::{
-    BarEditor, CameraMotion, InputTracker, LookDrag, MarkerBuilder, MarkerSync, PathSession, ScreenshotSequence,
-    SmoothnessTelemetry, Toast,
+    BarEditor, CameraMotion, InputTracker, LookDrag, MarkerBuilder, MarkerSync, OrbitMotion, PathSession,
+    ScreenshotSequence, SmoothnessTelemetry, Toast,
 };
 use crate::structs::{
     CameraCommand, CameraPose, FrameOutput, FrameStatus, FreecamAction, FreecamState, KeyEdit, MarkerEntry,
-    ScreenshotStep, ServerInstruction, StartLeases, StartRefusal, TelemetryReport, ToastKind, UiAction, UiLegend,
-    UiSnapshot, UiTimingSummary, Vec3,
+    PointerButton, ScreenshotStep, ServerInstruction, StartLeases, StartRefusal, TelemetryReport, ToastKind, UiAction,
+    UiLegend, UiSnapshot, UiTimingSummary, Vec3,
 };
 
 // relative FOV or aspect change that resizes the marker boxes
@@ -66,6 +66,11 @@ pub struct FreecamController {
     marker_settle_limit: u32,
     // frames playback has run since it started
     playback_frames: u32,
+    orbit: OrbitMotion,
+    orbit_requested: bool,
+    orbit_stop_requested: bool,
+    // frames the orbit has run since it started
+    orbit_frames: u32,
     // false when this frame's marker batch could not be delivered and stays pending
     batch_ready: bool,
     screenshot: ScreenshotSequence,
@@ -92,6 +97,10 @@ impl FreecamController {
             marker_in_world: false,
             marker_generation: 0,
             playback_frames: 0,
+            orbit: OrbitMotion::new(motion.pitch_limit),
+            orbit_requested: false,
+            orbit_stop_requested: false,
+            orbit_frames: 0,
             batch_ready: false,
             editor: BarEditor::new(look_at),
             screenshot: ScreenshotSequence::new(settle_limit),
@@ -133,34 +142,47 @@ impl FreecamController {
                     self.on_keybind(action, phase);
                 }
             }
-            ModEvent::PointerDelta { dx, dy } => {
-                // mouse-look runs outside bar mode, and in bar mode during a look drag
-                let looking = !self.cursor_mode || self.drag.is_active();
-                self.input.on_pointer_delta(dx, dy, self.is_active() && looking, self.menu_open);
-            }
-            ModEvent::Wheel { delta } => {
-                // in bar mode a wheel notch over the UI goes to the UI and leaves the speed alone
-                if !(self.cursor_mode && self.pointer_over_ui) {
-                    self.input.on_wheel(delta, self.is_active(), self.menu_open);
-                }
-            }
-            ModEvent::PointerButton { button, down, .. } => {
-                let can_drag =
-                    self.cursor_mode && self.state == FreecamState::On && !self.menu_open && !self.pointer_over_ui;
-                self.drag.on_button(button, down, can_drag);
-            }
             ModEvent::Suspended { capability, .. } | ModEvent::Revoked { capability, .. }
                 if matches!(capability, Capability::Camera | Capability::Input) =>
             {
-                self.lease_lost = true;
-                self.input.clear_held();
+                self.lose_lease();
             }
+            ModEvent::InputLeaseSuspended | ModEvent::InputLeaseLost => self.lose_lease(),
             ModEvent::Disabled => {
                 self.disabled = true;
                 self.input.clear_held();
             }
             _ => {}
         }
+    }
+
+    // a bind the mod layer matched itself, as a manager keybind of the same action and phase
+    pub fn on_bind(&mut self, action: FreecamAction, phase: KeybindPhase) {
+        self.on_keybind(action, phase);
+    }
+
+    // raw mouse counts; mouse-look runs outside bar mode, and in bar mode during a look drag
+    pub fn on_look_counts(&mut self, dx: f32, dy: f32) {
+        let looking = !self.cursor_mode || self.drag.is_active();
+        self.input.on_pointer_delta(dx, dy, self.is_active() && looking, self.menu_open);
+    }
+
+    // wheel notches; in bar mode a notch over the UI goes to the UI and leaves the speed alone
+    pub fn on_wheel(&mut self, notches: f32) {
+        if !(self.cursor_mode && self.pointer_over_ui) {
+            self.input.on_wheel(notches, self.is_active(), self.menu_open);
+        }
+    }
+
+    // a mouse button went down or up; a right press away from the UI in bar mode starts a look drag
+    pub fn on_button(&mut self, button: PointerButton, down: bool) {
+        let can_drag = self.cursor_mode && self.state == FreecamState::On && !self.menu_open && !self.pointer_over_ui;
+        self.drag.on_button(button, down, can_drag);
+    }
+
+    fn lose_lease(&mut self) {
+        self.lease_lost = true;
+        self.input.clear_held();
     }
 
     // a flight keybind is held from Pressed to Released; every other action runs once on Pressed
@@ -189,6 +211,9 @@ impl FreecamController {
             }
             FreecamAction::DeletePoint if self.state == FreecamState::On => self.editor.delete_selected(&mut self.path),
             FreecamAction::ToggleBar if active => self.cursor_requested = true,
+            FreecamAction::Orbit if self.state == FreecamState::On => self.orbit_requested = true,
+            FreecamAction::Orbit if self.state == FreecamState::Orbiting => self.orbit_stop_requested = true,
+            _ if self.state == FreecamState::Orbiting && Self::is_flight(action) => self.orbit_stop_requested = true,
             _ => {}
         }
     }
@@ -217,6 +242,7 @@ impl FreecamController {
         self.legend = UiLegend::new(&config.keys);
         self.legend_revision = self.legend_revision.wrapping_add(1);
         self.path.set_pitch_limit(config.motion.pitch_limit);
+        self.orbit.set_pitch_limit(config.motion.pitch_limit);
         self.motion.set_config(config.motion);
         self.editor.set_look_at(config.look_at);
     }
@@ -352,10 +378,12 @@ impl FreecamController {
     }
 
     pub fn frame(&mut self, status: &FrameStatus) -> FrameOutput {
-        // the bar key while a path plays stops the playback instead of opening the cursor
+        // the bar key while a path plays or the camera orbits stops it instead of opening the cursor
         let stop_playback = self.cursor_requested && self.state == FreecamState::Playing;
+        let stop_orbit = self.cursor_requested && self.state == FreecamState::Orbiting;
         self.play_requested |= stop_playback;
-        let toggle_cursor = std::mem::take(&mut self.cursor_requested) && !stop_playback;
+        self.orbit_stop_requested |= stop_orbit;
+        let toggle_cursor = std::mem::take(&mut self.cursor_requested) && !stop_playback && !stop_orbit;
         let dt = self.advance_clock(status.time_seconds);
         let mut output = self.advance(status, dt);
         self.editor.clamp(&self.path);
@@ -537,6 +565,8 @@ impl FreecamController {
         let toggle = std::mem::take(&mut self.toggle_requested);
         let handover = std::mem::take(&mut self.handover_requested);
         let play = std::mem::take(&mut self.play_requested);
+        let orbit = std::mem::take(&mut self.orbit_requested);
+        let stop_orbit = std::mem::take(&mut self.orbit_stop_requested);
         let lease_lost = std::mem::take(&mut self.lease_lost);
         let disabled = std::mem::take(&mut self.disabled);
         if self.is_active() {
@@ -551,15 +581,16 @@ impl FreecamController {
                 out.camera = CameraCommand::Clear;
                 return out;
             }
-            if lease_lost && matches!(self.state, FreecamState::On | FreecamState::Playing) {
+            if lease_lost && matches!(self.state, FreecamState::On | FreecamState::Playing | FreecamState::Orbiting) {
                 return self.begin_exit("another mod took the camera or the input");
             }
         }
         match self.state {
             FreecamState::Off if toggle => self.try_start(status),
             FreecamState::Off => FrameOutput::default(),
-            FreecamState::On => self.run(status, dt, toggle, play),
+            FreecamState::On => self.run(status, dt, toggle, play, orbit),
             FreecamState::Playing => self.play(status, dt, toggle, play),
+            FreecamState::Orbiting => self.orbit_frame(status, dt, toggle, stop_orbit),
             FreecamState::Exiting { frames_left } => self.count_down(frames_left, status.camera_held_by_other),
         }
     }
@@ -605,9 +636,18 @@ impl FreecamController {
         Self::active_output(status.start_pose)
     }
 
-    fn run(&mut self, status: &FrameStatus, dt: f64, toggle: bool, play: bool) -> FrameOutput {
+    fn run(&mut self, status: &FrameStatus, dt: f64, toggle: bool, play: bool, orbit: bool) -> FrameOutput {
         if let Some(output) = self.check_exit(status, toggle) {
             return output;
+        }
+        if orbit && !status.menu_open {
+            if self.orbit.start(self.motion.pose(), status.start_pose.position, self.motion.speed()) {
+                self.state = FreecamState::Orbiting;
+                self.orbit_frames = 0;
+                curia::info!("freecam orbiting the player");
+                return self.orbit_frame(status, dt, false, false);
+            }
+            curia::info!("freecam orbit refused, camera too close to the player");
         }
         if play && !status.menu_open {
             let from = self.editor.prepare_play(&mut self.path);
@@ -661,6 +701,49 @@ impl FreecamController {
             self.record_telemetry(status, dt, &output, velocity);
         }
         output
+    }
+
+    // look input is dropped and the wheel sets the orbit speed; the orbit holds while a menu is open or while the
+    // markers leave the world, and freecam control resumes where the ease-out ends
+    fn orbit_frame(&mut self, status: &FrameStatus, dt: f64, toggle: bool, stop: bool) -> FrameOutput {
+        if let Some(output) = self.check_exit(status, toggle) {
+            return output;
+        }
+        self.input.take_look();
+        self.motion.scroll(self.input.take_scroll());
+        if stop {
+            self.orbit.stop();
+        }
+        let before = self.motion.pose();
+        self.orbit_frames = self.orbit_frames.saturating_add(1);
+        let settling = self.marker_sync.live_slots() > 0 && self.orbit_frames <= self.marker_settle_limit;
+        let dt = if status.menu_open || settling { 0.0 } else { dt as f32 };
+        let pose = self.orbit.step(dt, self.motion.speed());
+        self.motion.reset(pose);
+        if self.orbit.is_finished() {
+            self.state = FreecamState::On;
+            curia::info!("freecam orbit over");
+        }
+        let output = Self::active_output(pose);
+        if dt > 0.0 {
+            let velocity = (pose.position - before.position) * (1.0 / dt);
+            self.telemetry.record_aim_turn(before.forward(), pose.forward());
+            self.record_telemetry(status, dt, &output, velocity);
+        }
+        output
+    }
+
+    fn is_flight(action: FreecamAction) -> bool {
+        matches!(
+            action,
+            FreecamAction::FlyForward
+                | FreecamAction::FlyBack
+                | FreecamAction::FlyLeft
+                | FreecamAction::FlyRight
+                | FreecamAction::FlyUp
+                | FreecamAction::FlyDown
+                | FreecamAction::FlyFast
+        )
     }
 
     // the camera stands still where playback left it and freecam control resumes

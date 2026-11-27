@@ -5,6 +5,7 @@ mod look_at_aim;
 mod marker_builder;
 mod marker_sync;
 mod motion;
+mod orbit_motion;
 mod path_curve;
 mod path_player;
 mod path_session;

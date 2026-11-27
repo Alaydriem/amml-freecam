@@ -12,6 +12,9 @@ pub struct CameraMotion {
 }
 
 impl CameraMotion {
+    // degrees of yaw goal past which the yaw and the goal move back by whole turns
+    pub const YAW_BOUND_DEGREES: f32 = 360.0;
+
     pub fn new(config: MotionConfig) -> Self {
         let speed = config.start_speed;
         let smooth = config.smooth_at_start;
@@ -77,6 +80,7 @@ impl CameraMotion {
         let look_k = self.blend(self.config.look_ease_rate, dt);
         self.pose.yaw += (self.yaw_goal - self.pose.yaw) * look_k;
         self.pose.pitch += (self.pitch_goal - self.pose.pitch) * look_k;
+        self.recentre_yaw();
 
         let multiplier = if held.fast { self.config.fast_multiplier } else { 1.0 };
         let target = self.wish(held) * (self.speed * multiplier);
@@ -96,6 +100,17 @@ impl CameraMotion {
 
     pub fn speed(&self) -> f32 {
         self.speed
+    }
+
+    // moves the yaw and its goal back by the same whole turns once the goal passes YAW_BOUND_DEGREES, so mouse look
+    // keeps f32 precision however far it turns; the view does not change
+    fn recentre_yaw(&mut self) {
+        if self.yaw_goal.abs() <= Self::YAW_BOUND_DEGREES {
+            return;
+        }
+        let shift = (self.yaw_goal / 360.0).round() * 360.0;
+        self.yaw_goal -= shift;
+        self.pose.yaw -= shift;
     }
 
     // fraction of the remaining distance covered this frame

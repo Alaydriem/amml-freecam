@@ -19,6 +19,7 @@ pub struct KeyConfig {
     pub fly_up: String,
     pub fly_down: String,
     pub fly_fast: String,
+    pub orbit: String,
 }
 
 impl Default for KeyConfig {
@@ -36,6 +37,7 @@ impl Default for KeyConfig {
             fly_up: "Space".to_owned(),
             fly_down: "Shift".to_owned(),
             fly_fast: "Ctrl".to_owned(),
+            orbit: "F3+O".to_owned(),
         }
     }
 }

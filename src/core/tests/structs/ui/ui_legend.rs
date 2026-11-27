@@ -15,7 +15,13 @@ fn legend_has_r3_rows() {
 
     assert_eq!(
         shown(&legend, false),
-        [("F3+E", "show bar"), ("Ctrl+B", "add point"), ("F3+Delete", "delete point"), ("F3+P", "exit freecam")]
+        [
+            ("F3+E", "show bar"),
+            ("Ctrl+B", "add point"),
+            ("F3+Delete", "delete point"),
+            ("F3+O", "orbit"),
+            ("F3+P", "exit freecam")
+        ]
     );
 }
 
@@ -30,6 +36,7 @@ fn bar_mode_adds_the_drag_row_and_relabels_the_bar_row() {
             ("RMB drag", "look"),
             ("Ctrl+B", "add point"),
             ("F3+Delete", "delete point"),
+            ("F3+O", "orbit"),
             ("F3+P", "exit freecam")
         ]
     );
@@ -45,11 +52,17 @@ fn a_row_past_the_end_is_not_shown() {
 
 #[test]
 fn legend_shows_bound_chords() {
-    let keys = KeyConfig { toggle: "Ctrl+Shift+F10".to_owned(), add_point: "N".to_owned(), ..KeyConfig::default() };
+    let keys = KeyConfig {
+        toggle: "Ctrl+Shift+F10".to_owned(),
+        add_point: "N".to_owned(),
+        orbit: "K".to_owned(),
+        ..KeyConfig::default()
+    };
 
     let legend = UiLegend::new(&keys);
 
     let shown = shown(&legend, false);
     assert_eq!(shown[1].0, "N");
-    assert_eq!(shown[3].0, "Ctrl+Shift+F10");
+    assert_eq!(shown[3].0, "K");
+    assert_eq!(shown[4].0, "Ctrl+Shift+F10");
 }

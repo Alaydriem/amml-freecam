@@ -22,6 +22,7 @@ impl UiLegend {
                 drag,
                 row(&keys.add_point, "add point", None),
                 row(&keys.delete_point, "delete point", None),
+                row(&keys.orbit, "orbit", None),
                 row(&keys.toggle, "exit freecam", None),
             ],
         }

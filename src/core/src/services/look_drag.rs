@@ -1,5 +1,4 @@
-// the mod manager's number for the right pointer button
-const BUTTON_RIGHT: u8 = 1;
+use crate::structs::PointerButton;
 
 // the right-button look drag in bar mode: the button goes down away from the UI, the cursor goes away and the mouse
 // turns the camera like mouse-look until the button comes up, then the cursor comes back. The drag lives only inside
@@ -17,8 +16,8 @@ impl LookDrag {
     }
 
     // a pointer button event; a right press starts a drag only when `can_start`, a right release always ends one
-    pub fn on_button(&mut self, button: u8, down: bool, can_start: bool) {
-        if button != BUTTON_RIGHT {
+    pub fn on_button(&mut self, button: PointerButton, down: bool, can_start: bool) {
+        if button != PointerButton::Right {
             return;
         }
         if !down {

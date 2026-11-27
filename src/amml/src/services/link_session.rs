@@ -1,12 +1,13 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use amm_abi::types::AmmStatus;
-use amm_client::link::{EventDrain, ManagerLink};
+use amm_client::link::{EventDrain, LinkState, ManagerLink};
 use amm_core::errors::LinkError;
+use amm_core::structs::capture::ScreenshotLayers;
 use amm_core::structs::descriptor::Capability;
 use amm_core::structs::event::ModEvent;
 use amm_core::structs::lease::AcquireOutcome;
+use amml_api::ShotId;
 use amml_i18n::localize::Localizer;
 use freecam_core::config::FreecamConfig;
 use freecam_core::structs::StartLeases;
@@ -14,31 +15,30 @@ use freecam_ui::runtime::FreecamLocale;
 
 // freecam's link to the mod manager, on the game thread only: the frame's events, the flight leases and the cursor.
 //
-// Bound: `events` holds at most DRAIN_LIMIT events, reserved in `new()`; the events past it wait in the manager's
-// queue for the next frame
+// Bound: `events` holds at most DRAIN_LIMIT events, reserved in `new()`; the events past it wait in the link's queue
+// for the next frame
 pub struct LinkSession {
     link: ManagerLink,
     events: Vec<ModEvent>,
     holding: bool,
     cursor_on: bool,
-    // the manager has the screenshot call (ABI 1.2), until a request says it does not
-    can_screenshot: bool,
 }
 
 impl LinkSession {
-    // the manager's own queue holds 256 events per mod
     pub const DRAIN_LIMIT: usize = 4 * EventDrain::CAPACITY;
     // the leases of a flight, in the order they are asked for
     pub const FLIGHT: [Capability; 5] =
         [Capability::Camera, Capability::Input, Capability::Hud, Capability::Overlay, Capability::WorldDraw];
 
     pub fn new(link: ManagerLink) -> Self {
-        let can_screenshot = link.supports_screenshots();
-        Self { link, events: Vec::with_capacity(Self::DRAIN_LIMIT), holding: false, cursor_on: false, can_screenshot }
+        Self { link, events: Vec::with_capacity(Self::DRAIN_LIMIT), holding: false, cursor_on: false }
     }
 
-    // reads the language the person picked in the manager and gives the frame's layers freecam's words in it; a
-    // manager older than ABI 1.5 has no language setting, so freecam shows English
+    pub fn connected(&self) -> bool {
+        self.link.state() == LinkState::Connected
+    }
+
+    // reads the language the person picked in the manager and gives the frame's layers freecam's words in it
     pub fn apply_locale(&self) {
         let code = self.link.locale().unwrap_or_default();
         self.link.set_localizer(FreecamLocale::localizer(&code));
@@ -52,14 +52,8 @@ impl LinkSession {
     // the events queued since the last frame, up to DRAIN_LIMIT
     pub fn drain(&mut self) -> &[ModEvent] {
         self.events.clear();
-        while self.events.len() < Self::DRAIN_LIMIT {
-            let before = self.events.len();
-            let room = Self::DRAIN_LIMIT - before;
-            self.events.extend(self.link.events().take(room));
-            if self.events.len() - before < EventDrain::CAPACITY {
-                break;
-            }
-        }
+        let room = Self::DRAIN_LIMIT;
+        self.events.extend(self.link.events().take(room));
         &self.events
     }
 
@@ -70,7 +64,10 @@ impl LinkSession {
                 Ok(AcquireOutcome::Granted | AcquireOutcome::Preempted) => false,
                 Ok(AcquireOutcome::Denied { .. }) => true,
                 Err(error) => {
-                    curia::warn!("flight lease not granted", { capability: format!("{capability:?}"), error: error.to_string() });
+                    curia::warn!("flight lease not granted", {
+                        capability: format!("{capability:?}"),
+                        error: error.to_string(),
+                    });
                     true
                 }
             };
@@ -94,6 +91,7 @@ impl LinkSession {
         self.holding = false;
     }
 
+    // true from a granted start until the leases are given back; freecam then matches its own binds
     pub fn holding(&self) -> bool {
         self.holding
     }
@@ -127,27 +125,29 @@ impl LinkSession {
         }
     }
 
-    pub fn can_screenshot(&self) -> bool {
-        self.can_screenshot
+    // true while the manager panel is open; freecam then matches no bind
+    pub fn panel_open(&self) -> bool {
+        self.link.panel_open()
     }
 
-    // asks the manager for a PNG of the next Present at `path`; the manager's sequence, or None when it refused.
-    // An Unsupported answer means this manager has no screenshots, and the button goes off
-    pub fn request_screenshot(&mut self, path: &Path) -> Option<u32> {
-        match self.link.request_screenshot(path) {
-            Ok(sequence) => Some(sequence),
+    // asks the loader for a PNG of the next frame at `path`, before any mod layer (freecam hides its own UI for the
+    // shot); the id of the shot, or None when the loader refused
+    pub fn request_screenshot(&self, path: &Path) -> Option<ShotId> {
+        match self.link.request_screenshot_with(path, ScreenshotLayers::GameOnly) {
+            Ok(id) => Some(id),
             Err(error) => {
-                if error == LinkError::from(AmmStatus::Unsupported) {
-                    self.can_screenshot = false;
-                }
-                curia::warn!("screenshot refused by the mod manager", { error: error.to_string() });
+                Self::log_refusal(&error);
                 None
             }
         }
     }
 
-    // another mod holds the Camera lease, so a camera instruction now is not the server's
+    // another mod holds the Camera lease
     pub fn camera_held_by_other(&self) -> bool {
         self.link.held_by_other(Capability::Camera)
+    }
+
+    fn log_refusal(error: &LinkError) {
+        curia::warn!("screenshot refused by the loader", { error: error.to_string() });
     }
 }

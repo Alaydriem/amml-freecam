@@ -13,7 +13,7 @@ use super::{BarDraw, Strip};
 pub struct Legend;
 
 impl Legend {
-    /// Rows past this many are not drawn. The legend core builds has 5, one of them shown only in bar mode.
+    /// Rows past this many are not drawn. The legend core builds has 6, one of them shown only in bar mode.
     pub const MAX_ROWS: usize = 8;
 
     const GAP_BELOW_STRIP: f32 = 8.0;
